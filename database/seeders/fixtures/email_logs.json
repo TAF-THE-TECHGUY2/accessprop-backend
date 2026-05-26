@@ -1,0 +1,66 @@
+[
+  {
+    "id": "mail-001",
+    "recipient": "amelia.carter@harborcap.com",
+    "type": "welcome",
+    "subject": "Welcome to Access Properties",
+    "status": "sent",
+    "sentAt": "2026-04-19T13:20:00Z"
+  },
+  {
+    "id": "mail-002",
+    "recipient": "j.sinclair@northfieldpartners.com",
+    "type": "kyc_update",
+    "subject": "Your KYC documents are under review",
+    "status": "sent",
+    "sentAt": "2026-04-24T14:21:00Z"
+  },
+  {
+    "id": "mail-003",
+    "recipient": "priya.ndlovu@oakbridge.co.za",
+    "type": "reminder",
+    "subject": "Complete your investor verification",
+    "status": "queued",
+    "sentAt": "2026-05-01T09:10:00Z"
+  },
+  {
+    "id": "mail-004",
+    "recipient": "emorales@ridgeviewadvisors.com",
+    "type": "funding",
+    "subject": "Funding reminder for your commitment",
+    "status": "sent",
+    "sentAt": "2026-04-28T15:34:00Z"
+  },
+  {
+    "id": "mail-005",
+    "recipient": "marcus.lee@verdantcapital.io",
+    "type": "kyc_update",
+    "subject": "Action needed on your KYC submission",
+    "status": "failed",
+    "sentAt": "2026-04-13T12:49:00Z"
+  },
+  {
+    "id": "mail-006",
+    "recipient": "s.bennett@highcliffventures.com",
+    "type": "partner_review",
+    "subject": "Accreditation review in progress",
+    "status": "sent",
+    "sentAt": "2026-04-30T09:30:00Z"
+  },
+  {
+    "id": "mail-007",
+    "recipient": "noah@lakesideoffice.com",
+    "type": "distribution",
+    "subject": "Your quarterly distribution notice",
+    "status": "sent",
+    "sentAt": "2026-04-30T14:32:00Z"
+  },
+  {
+    "id": "mail-008",
+    "recipient": "camila.torres@atlasfamilyoffice.mx",
+    "type": "funding",
+    "subject": "Final funding instructions",
+    "status": "draft",
+    "sentAt": "2026-05-02T16:18:00Z"
+  }
+]

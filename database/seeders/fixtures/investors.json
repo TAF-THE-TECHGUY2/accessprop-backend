@@ -1,0 +1,519 @@
+[
+  {
+    "id": "inv-1001",
+    "name": "Amelia Carter",
+    "email": "amelia.carter@harborcap.com",
+    "phone": "(617) 555-0182",
+    "country": "United States",
+    "joinedAt": "2026-04-18T09:14:00Z",
+    "investmentAmount": 250000,
+    "accreditationStatus": "accredited",
+    "kycStatus": "approved",
+    "investmentStatus": "active",
+    "dashboardStatus": "active",
+    "address": {
+      "line1": "154 Seaport Boulevard",
+      "line2": "Unit 12A",
+      "city": "Boston",
+      "state": "MA",
+      "postalCode": "02210",
+      "country": "United States"
+    },
+    "personalInfo": {
+      "investorType": "Individual",
+      "entityName": "N/A",
+      "taxIdLast4": "4821",
+      "residency": "U.S. Person"
+    },
+    "investmentInfo": {
+      "fundName": "Access Properties Diversified Income Fund I",
+      "commitment": 250000,
+      "funded": 250000,
+      "walletStatus": "Funds received",
+      "expectedYield": "8.2% target",
+      "lastDistribution": "2026-04-30T14:00:00Z"
+    },
+    "documents": [
+      {
+        "id": "doc-1001-a",
+        "type": "Passport",
+        "fileName": "amelia-passport.pdf",
+        "submittedAt": "2026-04-18T09:30:00Z",
+        "status": "approved"
+      },
+      {
+        "id": "doc-1001-b",
+        "type": "Proof of Address",
+        "fileName": "amelia-utility-bill.pdf",
+        "submittedAt": "2026-04-18T09:41:00Z",
+        "status": "approved"
+      }
+    ],
+    "activity": [
+      {
+        "id": "act-1001-1",
+        "title": "Investor profile approved",
+        "description": "Operations approved onboarding details and activated dashboard access.",
+        "timestamp": "2026-04-19T13:05:00Z"
+      },
+      {
+        "id": "act-1001-2",
+        "title": "Capital received",
+        "description": "Funding confirmation posted for initial commitment.",
+        "timestamp": "2026-04-26T16:22:00Z"
+      }
+    ],
+    "messages": [
+      {
+        "id": "msg-1001-1",
+        "subject": "Welcome to Access Properties",
+        "preview": "Your investor dashboard is now active.",
+        "sentAt": "2026-04-19T13:20:00Z"
+      }
+    ],
+    "notes": [
+      {
+        "id": "note-1001-1",
+        "body": "High-touch investor with preference for quarterly phone updates.",
+        "createdAt": "2026-04-20T10:15:00Z"
+      }
+    ]
+  },
+  {
+    "id": "inv-1002",
+    "name": "Jordan Sinclair",
+    "email": "j.sinclair@northfieldpartners.com",
+    "phone": "(212) 555-0108",
+    "country": "United States",
+    "joinedAt": "2026-04-24T14:02:00Z",
+    "investmentAmount": 150000,
+    "accreditationStatus": "accredited",
+    "kycStatus": "submitted",
+    "investmentStatus": "pending_partner_review",
+    "dashboardStatus": "pending",
+    "address": {
+      "line1": "74 Irving Place",
+      "line2": "Floor 8",
+      "city": "New York",
+      "state": "NY",
+      "postalCode": "10003",
+      "country": "United States"
+    },
+    "personalInfo": {
+      "investorType": "LLC",
+      "entityName": "Northfield Family Holdings LLC",
+      "taxIdLast4": "2198",
+      "residency": "U.S. Person"
+    },
+    "investmentInfo": {
+      "fundName": "Access Properties Diversified Income Fund I",
+      "commitment": 150000,
+      "funded": 0,
+      "walletStatus": "Awaiting capital call",
+      "expectedYield": "8.0% target",
+      "lastDistribution": null
+    },
+    "documents": [
+      {
+        "id": "doc-1002-a",
+        "type": "Certificate of Formation",
+        "fileName": "northfield-formation.pdf",
+        "submittedAt": "2026-04-24T14:16:00Z",
+        "status": "submitted"
+      },
+      {
+        "id": "doc-1002-b",
+        "type": "Beneficial Ownership",
+        "fileName": "northfield-beneficial-owners.pdf",
+        "submittedAt": "2026-04-24T14:19:00Z",
+        "status": "submitted"
+      }
+    ],
+    "activity": [
+      {
+        "id": "act-1002-1",
+        "title": "KYC package submitted",
+        "description": "Investor completed entity verification documents.",
+        "timestamp": "2026-04-24T14:20:00Z"
+      }
+    ],
+    "messages": [
+      {
+        "id": "msg-1002-1",
+        "subject": "KYC documents received",
+        "preview": "Our compliance team is reviewing your entity package.",
+        "sentAt": "2026-04-24T14:21:00Z"
+      }
+    ],
+    "notes": [
+      {
+        "id": "note-1002-1",
+        "body": "Requested expedited review ahead of May investment committee.",
+        "createdAt": "2026-04-25T08:10:00Z"
+      }
+    ]
+  },
+  {
+    "id": "inv-1003",
+    "name": "Priya Ndlovu",
+    "email": "priya.ndlovu@oakbridge.co.za",
+    "phone": "+27 82 555 0134",
+    "country": "South Africa",
+    "joinedAt": "2026-04-27T07:48:00Z",
+    "investmentAmount": 50000,
+    "accreditationStatus": "non_accredited",
+    "kycStatus": "pending",
+    "investmentStatus": "awaiting_kyc",
+    "dashboardStatus": "pending",
+    "address": {
+      "line1": "18 West Road South",
+      "line2": "Apartment 402",
+      "city": "Johannesburg",
+      "state": "Gauteng",
+      "postalCode": "2196",
+      "country": "South Africa"
+    },
+    "personalInfo": {
+      "investorType": "Individual",
+      "entityName": "N/A",
+      "taxIdLast4": "0019",
+      "residency": "Non-U.S. Person"
+    },
+    "investmentInfo": {
+      "fundName": "Access Properties Diversified Income Fund I",
+      "commitment": 50000,
+      "funded": 0,
+      "walletStatus": "KYC required",
+      "expectedYield": "7.8% target",
+      "lastDistribution": null
+    },
+    "documents": [
+      {
+        "id": "doc-1003-a",
+        "type": "Passport",
+        "fileName": "priya-passport.pdf",
+        "submittedAt": "2026-04-27T08:04:00Z",
+        "status": "pending"
+      }
+    ],
+    "activity": [
+      {
+        "id": "act-1003-1",
+        "title": "Investor created account",
+        "description": "Initial onboarding captured, waiting on compliance review.",
+        "timestamp": "2026-04-27T08:06:00Z"
+      }
+    ],
+    "messages": [],
+    "notes": []
+  },
+  {
+    "id": "inv-1004",
+    "name": "Elena Morales",
+    "email": "emorales@ridgeviewadvisors.com",
+    "phone": "(415) 555-0165",
+    "country": "United States",
+    "joinedAt": "2026-03-30T16:32:00Z",
+    "investmentAmount": 400000,
+    "accreditationStatus": "accredited",
+    "kycStatus": "approved",
+    "investmentStatus": "awaiting_funding",
+    "dashboardStatus": "active",
+    "address": {
+      "line1": "8 Mission Street",
+      "line2": "Suite 700",
+      "city": "San Francisco",
+      "state": "CA",
+      "postalCode": "94105",
+      "country": "United States"
+    },
+    "personalInfo": {
+      "investorType": "Trust",
+      "entityName": "Morales Revocable Trust",
+      "taxIdLast4": "7732",
+      "residency": "U.S. Person"
+    },
+    "investmentInfo": {
+      "fundName": "Access Properties Diversified Income Fund I",
+      "commitment": 400000,
+      "funded": 150000,
+      "walletStatus": "Partial funding received",
+      "expectedYield": "8.1% target",
+      "lastDistribution": null
+    },
+    "documents": [
+      {
+        "id": "doc-1004-a",
+        "type": "Trust Certification",
+        "fileName": "morales-trust-cert.pdf",
+        "submittedAt": "2026-03-31T09:24:00Z",
+        "status": "approved"
+      }
+    ],
+    "activity": [
+      {
+        "id": "act-1004-1",
+        "title": "KYC approved",
+        "description": "Compliance review completed in 1.4 days.",
+        "timestamp": "2026-04-01T14:30:00Z"
+      }
+    ],
+    "messages": [],
+    "notes": [
+      {
+        "id": "note-1004-1",
+        "body": "Funding balance expected after liquidity event on May 15.",
+        "createdAt": "2026-04-28T15:18:00Z"
+      }
+    ]
+  },
+  {
+    "id": "inv-1005",
+    "name": "Marcus Lee",
+    "email": "marcus.lee@verdantcapital.io",
+    "phone": "(305) 555-0121",
+    "country": "United States",
+    "joinedAt": "2026-04-11T11:11:00Z",
+    "investmentAmount": 90000,
+    "accreditationStatus": "non_accredited",
+    "kycStatus": "rejected",
+    "investmentStatus": "inactive",
+    "dashboardStatus": "inactive",
+    "address": {
+      "line1": "210 Biscayne Boulevard",
+      "line2": "Unit 31C",
+      "city": "Miami",
+      "state": "FL",
+      "postalCode": "33131",
+      "country": "United States"
+    },
+    "personalInfo": {
+      "investorType": "Individual",
+      "entityName": "N/A",
+      "taxIdLast4": "1145",
+      "residency": "U.S. Person"
+    },
+    "investmentInfo": {
+      "fundName": "Access Properties Diversified Income Fund I",
+      "commitment": 90000,
+      "funded": 0,
+      "walletStatus": "On hold",
+      "expectedYield": "7.5% target",
+      "lastDistribution": null
+    },
+    "documents": [
+      {
+        "id": "doc-1005-a",
+        "type": "Driver License",
+        "fileName": "marcus-license.pdf",
+        "submittedAt": "2026-04-12T10:20:00Z",
+        "status": "rejected"
+      }
+    ],
+    "activity": [
+      {
+        "id": "act-1005-1",
+        "title": "KYC rejected",
+        "description": "Document image quality insufficient; resubmission requested.",
+        "timestamp": "2026-04-13T12:44:00Z"
+      }
+    ],
+    "messages": [
+      {
+        "id": "msg-1005-1",
+        "subject": "Action needed on KYC documents",
+        "preview": "Please upload a clearer identity document.",
+        "sentAt": "2026-04-13T12:49:00Z"
+      }
+    ],
+    "notes": []
+  },
+  {
+    "id": "inv-1006",
+    "name": "Sophia Bennett",
+    "email": "s.bennett@highcliffventures.com",
+    "phone": "(214) 555-0112",
+    "country": "United States",
+    "joinedAt": "2026-04-29T17:05:00Z",
+    "investmentAmount": 320000,
+    "accreditationStatus": "accredited",
+    "kycStatus": "submitted",
+    "investmentStatus": "pending_partner_review",
+    "dashboardStatus": "pending",
+    "address": {
+      "line1": "4020 McKinney Avenue",
+      "line2": "Suite 2100",
+      "city": "Dallas",
+      "state": "TX",
+      "postalCode": "75204",
+      "country": "United States"
+    },
+    "personalInfo": {
+      "investorType": "Corporation",
+      "entityName": "Highcliff Ventures Inc.",
+      "taxIdLast4": "5510",
+      "residency": "U.S. Person"
+    },
+    "investmentInfo": {
+      "fundName": "Access Properties Diversified Income Fund I",
+      "commitment": 320000,
+      "funded": 0,
+      "walletStatus": "Awaiting final partner review",
+      "expectedYield": "8.4% target",
+      "lastDistribution": null
+    },
+    "documents": [
+      {
+        "id": "doc-1006-a",
+        "type": "Articles of Incorporation",
+        "fileName": "highcliff-articles.pdf",
+        "submittedAt": "2026-04-29T17:14:00Z",
+        "status": "submitted"
+      },
+      {
+        "id": "doc-1006-b",
+        "type": "Tax Certificate",
+        "fileName": "highcliff-tax-certificate.pdf",
+        "submittedAt": "2026-04-29T17:22:00Z",
+        "status": "submitted"
+      }
+    ],
+    "activity": [
+      {
+        "id": "act-1006-1",
+        "title": "Partner review pending",
+        "description": "Escalated for final accreditation check.",
+        "timestamp": "2026-04-30T09:08:00Z"
+      }
+    ],
+    "messages": [],
+    "notes": [
+      {
+        "id": "note-1006-1",
+        "body": "COO requested direct notification when KYC clears.",
+        "createdAt": "2026-04-30T09:20:00Z"
+      }
+    ]
+  },
+  {
+    "id": "inv-1007",
+    "name": "Noah Whitaker",
+    "email": "noah@lakesideoffice.com",
+    "phone": "(312) 555-0184",
+    "country": "United States",
+    "joinedAt": "2026-02-15T12:09:00Z",
+    "investmentAmount": 180000,
+    "accreditationStatus": "accredited",
+    "kycStatus": "approved",
+    "investmentStatus": "active",
+    "dashboardStatus": "active",
+    "address": {
+      "line1": "90 Wacker Drive",
+      "line2": "Floor 23",
+      "city": "Chicago",
+      "state": "IL",
+      "postalCode": "60606",
+      "country": "United States"
+    },
+    "personalInfo": {
+      "investorType": "Individual",
+      "entityName": "N/A",
+      "taxIdLast4": "8304",
+      "residency": "U.S. Person"
+    },
+    "investmentInfo": {
+      "fundName": "Access Properties Diversified Income Fund I",
+      "commitment": 180000,
+      "funded": 180000,
+      "walletStatus": "Fully funded",
+      "expectedYield": "8.1% target",
+      "lastDistribution": "2026-04-30T14:00:00Z"
+    },
+    "documents": [
+      {
+        "id": "doc-1007-a",
+        "type": "Passport",
+        "fileName": "noah-passport.pdf",
+        "submittedAt": "2026-02-15T12:20:00Z",
+        "status": "approved"
+      }
+    ],
+    "activity": [
+      {
+        "id": "act-1007-1",
+        "title": "Distribution posted",
+        "description": "Quarterly distribution notice sent to dashboard.",
+        "timestamp": "2026-04-30T14:30:00Z"
+      }
+    ],
+    "messages": [],
+    "notes": []
+  },
+  {
+    "id": "inv-1008",
+    "name": "Camila Torres",
+    "email": "camila.torres@atlasfamilyoffice.mx",
+    "phone": "+52 55 5555 0190",
+    "country": "Mexico",
+    "joinedAt": "2026-04-21T06:41:00Z",
+    "investmentAmount": 275000,
+    "accreditationStatus": "accredited",
+    "kycStatus": "approved",
+    "investmentStatus": "awaiting_funding",
+    "dashboardStatus": "active",
+    "address": {
+      "line1": "Paseo de la Reforma 255",
+      "line2": "Suite 1802",
+      "city": "Mexico City",
+      "state": "CDMX",
+      "postalCode": "06500",
+      "country": "Mexico"
+    },
+    "personalInfo": {
+      "investorType": "Individual",
+      "entityName": "N/A",
+      "taxIdLast4": "9921",
+      "residency": "Non-U.S. Person"
+    },
+    "investmentInfo": {
+      "fundName": "Access Properties Diversified Income Fund I",
+      "commitment": 275000,
+      "funded": 80000,
+      "walletStatus": "Awaiting final tranche",
+      "expectedYield": "8.3% target",
+      "lastDistribution": null
+    },
+    "documents": [
+      {
+        "id": "doc-1008-a",
+        "type": "Passport",
+        "fileName": "camila-passport.pdf",
+        "submittedAt": "2026-04-21T07:03:00Z",
+        "status": "approved"
+      },
+      {
+        "id": "doc-1008-b",
+        "type": "Proof of Address",
+        "fileName": "camila-address.pdf",
+        "submittedAt": "2026-04-21T07:15:00Z",
+        "status": "approved"
+      }
+    ],
+    "activity": [
+      {
+        "id": "act-1008-1",
+        "title": "International tax packet uploaded",
+        "description": "Documentation routed for final treasury validation.",
+        "timestamp": "2026-04-23T11:42:00Z"
+      }
+    ],
+    "messages": [],
+    "notes": [
+      {
+        "id": "note-1008-1",
+        "body": "Preferred bilingual communications for closing documents.",
+        "createdAt": "2026-04-23T11:48:00Z"
+      }
+    ]
+  }
+]

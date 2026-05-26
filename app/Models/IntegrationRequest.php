@@ -1,0 +1,22 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+class IntegrationRequest extends Model
+{
+    protected $guarded = ['id'];
+
+    protected $casts = [
+        'request_payload' => 'array',
+        'response_payload' => 'array',
+        'completed_at' => 'datetime',
+    ];
+
+    public function investor(): BelongsTo
+    {
+        return $this->belongsTo(Investor::class, 'investor_profile_id');
+    }
+}
