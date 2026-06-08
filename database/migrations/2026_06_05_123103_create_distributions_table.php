@@ -1,0 +1,28 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::create('distributions', function (Blueprint $table) {
+            $table->id();
+            $table->foreignId('fund_holding_id')->constrained('fund_holdings')->cascadeOnDelete();
+            $table->decimal('amount', 15, 2);
+            $table->timestamp('paid_at');
+            $table->string('distribution_type')->default('income');
+            $table->text('notes')->nullable();
+            $table->timestamps();
+
+            $table->index(['fund_holding_id', 'paid_at']);
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::dropIfExists('distributions');
+    }
+};

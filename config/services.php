@@ -58,4 +58,30 @@ return [
         'webhook_secret' => env('VERIFYINVESTOR_WEBHOOK_SECRET'),
     ],
 
+    'stripe' => [
+        'publishable_key' => env('STRIPE_PUBLISHABLE_KEY'),
+        'secret_key' => env('STRIPE_SECRET_KEY'),
+        'webhook_secret' => env('STRIPE_WEBHOOK_SECRET'),
+        'dashboard_url' => env('STRIPE_DASHBOARD_URL', 'https://dashboard.stripe.com/test'),
+        'sandbox' => (bool) env('STRIPE_SANDBOX', true),
+    ],
+
+    'investready' => [
+        'client_id' => env('INVESTREADY_CLIENT_ID'),
+        'client_secret' => env('INVESTREADY_CLIENT_SECRET'),
+        'redirect_uri' => env('INVESTREADY_REDIRECT_URI', 'http://localhost:3002/oauth/investready/callback'),
+        // Per docs: https://api.investready.com/oauth/token (confirmed).
+        // Authorize URL assumed to share the same base; verify with docs.
+        'authorize_url' => env('INVESTREADY_AUTHORIZE_URL', 'https://api.investready.com/oauth/authorize'),
+        'token_url' => env('INVESTREADY_TOKEN_URL', 'https://api.investready.com/oauth/token'),
+        'api_base_url' => env('INVESTREADY_API_BASE_URL', 'https://api.investready.com'),
+        // Per docs: POST /api/wl/user/get.json with access_token in the form body
+        // (NOT as a Bearer header). "wl" = whitelabel.
+        'verification_endpoint' => env('INVESTREADY_VERIFICATION_ENDPOINT', '/api/wl/user/get.json'),
+        // TODO: Confirm scope value(s) required for reading accreditation status.
+        'scope' => env('INVESTREADY_SCOPE', ''),
+        'webhook_secret' => env('INVESTREADY_WEBHOOK_SECRET'),
+        'sandbox' => (bool) env('INVESTREADY_SANDBOX', true),
+    ],
+
 ];

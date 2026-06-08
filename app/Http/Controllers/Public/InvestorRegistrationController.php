@@ -30,7 +30,7 @@ class InvestorRegistrationController extends Controller
             'zipPostalCode' => ['required', 'string', 'max:20'],
             'country' => ['required', 'string', 'max:100'],
             'experience' => ['required', 'string', 'in:experienced,new'],
-            'investmentAmount' => ['required', 'numeric', 'min:25000'],
+            'investmentAmount' => ['required', 'numeric', 'min:10000'],
             'accreditationStatus' => ['required', 'string', 'in:accredited,not-accredited'],
             'receiveUpdates' => ['nullable', 'boolean'],
         ]);

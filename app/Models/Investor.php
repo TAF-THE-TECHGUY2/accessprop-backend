@@ -34,6 +34,16 @@ class Investor extends Authenticatable
         return $this->hasMany(InvestorDocument::class, 'investor_profile_id');
     }
 
+    public function holdings(): HasMany
+    {
+        return $this->hasMany(FundHolding::class);
+    }
+
+    public function portalDocuments(): HasMany
+    {
+        return $this->hasMany(PortalDocument::class);
+    }
+
     public function activities(): HasMany
     {
         return $this->hasMany(InvestorActivity::class);

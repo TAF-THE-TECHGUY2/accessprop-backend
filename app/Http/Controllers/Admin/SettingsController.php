@@ -18,6 +18,7 @@ class SettingsController extends Controller
         'autoActivateDashboard' => 'auto_activate_dashboard',
         'supportEmail' => 'support_email',
         'defaultCountry' => 'default_country',
+        'allowParallelOnboarding' => 'allow_parallel_onboarding',
     ];
 
     public function show(): JsonResponse
@@ -36,6 +37,7 @@ class SettingsController extends Controller
             'autoActivateDashboard' => ['sometimes', 'boolean'],
             'supportEmail' => ['sometimes', 'email'],
             'defaultCountry' => ['sometimes', 'string', 'max:255'],
+            'allowParallelOnboarding' => ['sometimes', 'boolean'],
         ]);
 
         $setting = Setting::singleton();
@@ -63,6 +65,7 @@ class SettingsController extends Controller
             'autoActivateDashboard' => $setting->auto_activate_dashboard,
             'supportEmail' => $setting->support_email,
             'defaultCountry' => $setting->default_country,
+            'allowParallelOnboarding' => $setting->allow_parallel_onboarding,
         ];
     }
 }

@@ -11,6 +11,8 @@ class FundingInstruction extends Model
 
     protected $casts = [
         'released_at' => 'datetime',
+        'provider_payload' => 'array',
+        'amount_cents' => 'integer',
     ];
 
     public function investor(): BelongsTo

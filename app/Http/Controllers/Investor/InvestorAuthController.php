@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Investor;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Admin\InvestorResource;
 use App\Models\Investor;
+use App\Models\Setting;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\Hash;
 
 class InvestorAuthController extends Controller
@@ -39,9 +41,16 @@ class InvestorAuthController extends Controller
         return response()->json(['message' => 'Logged out']);
     }
 
-    public function me(Request $request): InvestorResource
+    public function me(Request $request): JsonResource
     {
-        return new InvestorResource($this->loadRelations($request->user()));
+        $investor = $this->loadRelations($request->user());
+        $setting = Setting::singleton();
+
+        return (new InvestorResource($investor))->additional([
+            'platform' => [
+                'allowParallelOnboarding' => (bool) $setting->allow_parallel_onboarding,
+            ],
+        ]);
     }
 
     private function loadRelations(Investor $investor): Investor

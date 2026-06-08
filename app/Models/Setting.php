@@ -13,6 +13,7 @@ class Setting extends Model
         'notify_on_submission' => 'boolean',
         'notify_on_funding' => 'boolean',
         'auto_activate_dashboard' => 'boolean',
+        'allow_parallel_onboarding' => 'boolean',
     ];
 
     public static function singleton(): self
@@ -28,6 +29,7 @@ class Setting extends Model
                 'auto_activate_dashboard' => false,
                 'support_email' => 'ops@accessproperties.com',
                 'default_country' => 'United States',
+                'allow_parallel_onboarding' => false,
             ],
         );
     }
