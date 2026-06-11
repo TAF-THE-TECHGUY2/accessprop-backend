@@ -173,6 +173,43 @@ class AdminFundController extends Controller
         return response()->json(['message' => 'deleted']);
     }
 
+    /**
+     * Delete a fund and all of its children (holdings, unit prices,
+     * distributions, fees, portal documents). Cascades via FK constraints.
+     *
+     * Requires `confirm` parameter to match the fund code exactly — guard
+     * against accidental destructive calls.
+     */
+    public function destroy(Request $request, string $code): JsonResponse
+    {
+        $request->validate([
+            'confirm' => ['required', 'string'],
+        ]);
+
+        if ($request->input('confirm') !== $code) {
+            return response()->json([
+                'message' => 'Confirmation code does not match.',
+            ], 422);
+        }
+
+        $fund = Fund::where('code', $code)->firstOrFail();
+
+        $impact = [
+            'holdings' => $fund->holdings()->count(),
+            'unitPrices' => $fund->unitPrices()->count(),
+            'distributions' => Distribution::whereHas('fundHolding', fn ($q) => $q->where('fund_id', $fund->id))->count(),
+            'fees' => FundFee::whereHas('fundHolding', fn ($q) => $q->where('fund_id', $fund->id))->count(),
+        ];
+
+        $fund->delete();
+
+        return response()->json([
+            'message' => 'Fund deleted.',
+            'code' => $code,
+            'cascadeImpact' => $impact,
+        ]);
+    }
+
     // ----- Distributions (auto-allocated across all holdings) -----
 
     public function declareDistribution(Request $request, string $code): JsonResponse

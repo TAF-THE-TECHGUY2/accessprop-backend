@@ -84,8 +84,10 @@ Route::prefix('admin')->group(function () {
         Route::get('/reports', [ReportsController::class, 'index']);
 
         Route::get('/investors', [InvestorController::class, 'index']);
+        Route::post('/investors', [InvestorController::class, 'store']);
         Route::get('/investors/{code}', [InvestorController::class, 'show']);
         Route::patch('/investors/{code}/statuses', [InvestorController::class, 'updateStatuses']);
+        Route::delete('/investors/{code}', [InvestorController::class, 'destroy']);
         Route::get('/investors/{code}/investready', [InvestorIntegrationController::class, 'showInvestReady']);
         Route::post('/investors/{code}/investready/resync', [InvestorIntegrationController::class, 'resyncInvestReady']);
         Route::get('/investors/{code}/stripe', [InvestorIntegrationController::class, 'showStripe']);
@@ -95,6 +97,7 @@ Route::prefix('admin')->group(function () {
         Route::post('/funds', [AdminFundController::class, 'store']);
         Route::get('/funds/{code}', [AdminFundController::class, 'show']);
         Route::patch('/funds/{code}', [AdminFundController::class, 'update']);
+        Route::delete('/funds/{code}', [AdminFundController::class, 'destroy']);
         Route::post('/funds/{code}/unit-prices', [AdminFundController::class, 'storeUnitPrice']);
         Route::delete('/unit-prices/{id}', [AdminFundController::class, 'destroyUnitPrice']);
         Route::post('/funds/{code}/distributions', [AdminFundController::class, 'declareDistribution']);
