@@ -30,8 +30,14 @@ class InvestorRegistrationController extends Controller
             'zipPostalCode' => ['required', 'string', 'max:20'],
             'country' => ['required', 'string', 'max:100'],
             'experience' => ['required', 'string', 'in:experienced,new'],
-            'investmentAmount' => ['required', 'numeric', 'min:10000'],
             'accreditationStatus' => ['required', 'string', 'in:accredited,not-accredited'],
+            'investmentAmount' => [
+                'required',
+                'numeric',
+                // Direct (accredited) path requires $10k min; third-party (non-accredited)
+                // path allows $100 min.
+                $request->input('accreditationStatus') === 'accredited' ? 'min:10000' : 'min:100',
+            ],
             'receiveUpdates' => ['nullable', 'boolean'],
         ]);
 
