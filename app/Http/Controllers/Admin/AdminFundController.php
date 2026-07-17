@@ -8,9 +8,13 @@ use App\Models\Fund;
 use App\Models\FundFee;
 use App\Models\FundHolding;
 use App\Models\FundUnitPrice;
+use App\Models\PortalDocument;
+use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class AdminFundController extends Controller
 {
@@ -72,6 +76,22 @@ class AdminFundController extends Controller
                     'periodStart' => $f->period_start->toDateString(),
                     'periodEnd' => $f->period_end->toDateString(),
                     'holdingId' => $f->fund_holding_id,
+                ]),
+            'documents' => PortalDocument::query()
+                ->where('scope', 'fund')
+                ->where('fund_id', $fund->id)
+                ->orderByDesc('document_dated_at')
+                ->orderByDesc('created_at')
+                ->get()
+                ->map(fn ($document) => [
+                    'id' => $document->id,
+                    'title' => $document->title,
+                    'category' => $document->category,
+                    'subcategory' => $document->subcategory,
+                    'sizeBytes' => $document->file_size_bytes,
+                    'mimeType' => $document->mime_type,
+                    'documentDatedAt' => optional($document->document_dated_at)->toDateString(),
+                    'createdAt' => optional($document->created_at)->toIso8601String(),
                 ]),
         ]);
     }
@@ -199,7 +219,14 @@ class AdminFundController extends Controller
             'unitPrices' => $fund->unitPrices()->count(),
             'distributions' => Distribution::whereHas('fundHolding', fn ($q) => $q->where('fund_id', $fund->id))->count(),
             'fees' => FundFee::whereHas('fundHolding', fn ($q) => $q->where('fund_id', $fund->id))->count(),
+            'documents' => PortalDocument::where('fund_id', $fund->id)->count(),
         ];
+
+        PortalDocument::query()
+            ->where('fund_id', $fund->id)
+            ->pluck('file_url')
+            ->reject(fn (string $path) => Str::startsWith($path, ['http://', 'https://']))
+            ->each(fn (string $path) => Storage::disk('local')->delete($path));
 
         $fund->delete();
 
@@ -361,7 +388,8 @@ class AdminFundController extends Controller
 
     private function autoQuarter(string $date): string
     {
-        $c = \Carbon\Carbon::parse($date);
+        $c = Carbon::parse($date);
+
         return 'Q'.$c->quarter.' '.$c->year;
     }
 }

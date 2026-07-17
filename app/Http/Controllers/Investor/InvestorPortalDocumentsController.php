@@ -7,6 +7,9 @@ use App\Models\PortalDocument;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class InvestorPortalDocumentsController extends Controller
 {
@@ -60,7 +63,7 @@ class InvestorPortalDocumentsController extends Controller
         return response()->json(['data' => $grouped]);
     }
 
-    public function download(Request $request, int $id): RedirectResponse|JsonResponse
+    public function download(Request $request, int $id): RedirectResponse|JsonResponse|StreamedResponse
     {
         $investor = $request->user();
         $document = PortalDocument::findOrFail($id);
@@ -75,8 +78,21 @@ class InvestorPortalDocumentsController extends Controller
             return response()->json(['message' => 'Forbidden'], 403);
         }
 
-        // Files live behind file_url. In production this would be a signed S3
-        // URL; for now we just redirect to whatever URL is stored.
+        if (! Str::startsWith($document->file_url, ['http://', 'https://'])) {
+            if (! Storage::disk('local')->exists($document->file_url)) {
+                return response()->json(['message' => 'Document file not found.'], 404);
+            }
+
+            $filename = (Str::slug(pathinfo($document->title, PATHINFO_FILENAME)) ?: 'offering-document').'.pdf';
+
+            return Storage::disk('local')->download(
+                $document->file_url,
+                $filename,
+                ['Content-Type' => $document->mime_type ?: 'application/pdf'],
+            );
+        }
+
+        // Legacy/demo records can still point to an externally hosted document.
         return redirect()->away($document->file_url);
     }
 }

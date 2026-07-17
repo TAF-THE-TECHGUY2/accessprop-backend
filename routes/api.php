@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\AdminCommunicationController;
 use App\Http\Controllers\Admin\AdminFundController;
+use App\Http\Controllers\Admin\AdminPortalDocumentController;
 use App\Http\Controllers\Admin\AgreementController;
 use App\Http\Controllers\Admin\AuthController;
 use App\Http\Controllers\Admin\DashboardController;
@@ -104,6 +105,9 @@ Route::prefix('admin')->group(function () {
         Route::delete('/distributions/{id}', [AdminFundController::class, 'destroyDistribution']);
         Route::post('/funds/{code}/fees', [AdminFundController::class, 'declareFee']);
         Route::delete('/fees/{id}', [AdminFundController::class, 'destroyFee']);
+        Route::post('/funds/{code}/documents', [AdminPortalDocumentController::class, 'store']);
+        Route::get('/funds/{code}/documents/{id}/download', [AdminPortalDocumentController::class, 'download']);
+        Route::delete('/funds/{code}/documents/{id}', [AdminPortalDocumentController::class, 'destroy']);
 
         // Communications (Phase 4 admin)
         Route::get('/communications', [AdminCommunicationController::class, 'index']);
