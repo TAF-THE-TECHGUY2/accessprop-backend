@@ -140,6 +140,13 @@ class AdminPortalDocumentTest extends TestCase
         $this->assertDatabaseCount('portal_documents', 0);
     }
 
+    public function test_unauthenticated_browser_download_returns_401_instead_of_server_error(): void
+    {
+        $this->get('/api/investor/portal/documents/1/download')
+            ->assertUnauthorized()
+            ->assertJsonPath('message', 'Unauthenticated.');
+    }
+
     private function makeInvestor(): Investor
     {
         return Investor::create([
