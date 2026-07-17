@@ -54,6 +54,10 @@ return [
 
     'url' => env('APP_URL', 'http://localhost'),
 
+    // Base URL of the investor-facing React app; used to build links in
+    // outbound emails (e.g. password reset).
+    'frontend_url' => env('FRONTEND_URL', 'https://investor.ap.boston'),
+
     /*
     |--------------------------------------------------------------------------
     | Application Timezone

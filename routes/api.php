@@ -16,6 +16,7 @@ use App\Http\Controllers\Admin\ReportsController;
 use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Investor\InvestorAuthController;
 use App\Http\Controllers\Investor\InvestorFundingController;
+use App\Http\Controllers\Investor\InvestorPasswordResetController;
 use App\Http\Controllers\Investor\InvestorPersonaController;
 use App\Http\Controllers\Investor\InvestorPortalCommunicationsController;
 use App\Http\Controllers\Investor\InvestorPortalDocumentsController;
@@ -40,6 +41,8 @@ Route::post('/webhooks/stripe', StripeWebhookController::class);
 
 Route::prefix('investor')->group(function () {
     Route::post('/login', [InvestorAuthController::class, 'login']);
+    Route::post('/password/forgot', [InvestorPasswordResetController::class, 'forgot'])->middleware('throttle:5,1');
+    Route::post('/password/reset', [InvestorPasswordResetController::class, 'reset'])->middleware('throttle:10,1');
 
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('/logout', [InvestorAuthController::class, 'logout']);
