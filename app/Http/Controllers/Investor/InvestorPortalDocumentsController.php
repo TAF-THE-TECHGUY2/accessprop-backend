@@ -3,10 +3,13 @@
 namespace App\Http\Controllers\Investor;
 
 use App\Http\Controllers\Controller;
+use App\Models\Fund;
+use App\Models\Investor;
 use App\Models\PortalDocument;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -19,9 +22,10 @@ class InvestorPortalDocumentsController extends Controller
 
         // Documents visible to this investor:
         //   - scope=global (everyone)
-        //   - scope=fund AND fund matches one of the investor's holdings
+        //   - scope=fund AND fund matches a holding or the investor's selected
+        //     offering (new investors have no holding before commitment)
         //   - scope=investor AND investor_id = this investor
-        $fundIds = $investor->holdings()->pluck('fund_id');
+        $fundIds = $this->accessibleFundIds($investor);
 
         $documents = PortalDocument::query()
             ->where(function ($q) use ($investor, $fundIds) {
@@ -72,7 +76,7 @@ class InvestorPortalDocumentsController extends Controller
         // or investor-scoped to this investor.
         $allowed = $document->scope === 'global'
             || ($document->scope === 'investor' && $document->investor_id === $investor->id)
-            || ($document->scope === 'fund' && $investor->holdings()->where('fund_id', $document->fund_id)->exists());
+            || ($document->scope === 'fund' && $this->accessibleFundIds($investor)->contains($document->fund_id));
 
         if (! $allowed) {
             return response()->json(['message' => 'Forbidden'], 403);
@@ -94,5 +98,36 @@ class InvestorPortalDocumentsController extends Controller
 
         // Legacy/demo records can still point to an externally hosted document.
         return redirect()->away($document->file_url);
+    }
+
+    private function accessibleFundIds(Investor $investor): Collection
+    {
+        $fundIds = $investor->holdings()->pluck('fund_id');
+
+        if (! empty($investor->investment_fund_name)) {
+            $selectedFundId = Fund::query()
+                ->where('name', $investor->investment_fund_name)
+                ->value('id');
+
+            if ($selectedFundId) {
+                $fundIds->push($selectedFundId);
+            }
+        }
+
+        // Registration currently defaults every investor to the active
+        // offering by name. Keep pre-commitment access working if an admin has
+        // renamed that fund since the investor registered.
+        if ($fundIds->isEmpty()) {
+            $activeFundId = Fund::query()
+                ->where('status', 'active')
+                ->orderBy('id')
+                ->value('id');
+
+            if ($activeFundId) {
+                $fundIds->push($activeFundId);
+            }
+        }
+
+        return $fundIds->unique()->values();
     }
 }

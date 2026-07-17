@@ -89,6 +89,39 @@ class AdminPortalDocumentTest extends TestCase
             ->assertHeader('content-type', 'application/pdf');
     }
 
+    public function test_pre_commitment_investor_can_access_selected_offering_documents_without_a_holding(): void
+    {
+        Storage::fake('local');
+        $admin = User::factory()->create();
+        Fund::create([
+            'code' => 'ARE I',
+            'name' => 'Access Properties Diversified Income Fund I',
+        ]);
+
+        Sanctum::actingAs($admin);
+        $this->post('/api/admin/funds/ARE%20I/documents', [
+            'title' => 'Pre-commitment Offering Memorandum',
+            'category' => 'legal',
+            'file' => UploadedFile::fake()->create('offering.pdf', 100, 'application/pdf'),
+        ], ['Accept' => 'application/json'])->assertCreated();
+
+        $investor = $this->makeInvestor();
+        $document = PortalDocument::firstOrFail();
+
+        $this->assertDatabaseCount('fund_holdings', 0);
+
+        Sanctum::actingAs($investor);
+
+        $this->getJson('/api/investor/portal/documents')
+            ->assertOk()
+            ->assertJsonPath('data.legal.0.id', $document->id)
+            ->assertJsonPath('data.legal.0.title', 'Pre-commitment Offering Memorandum');
+
+        $this->get("/api/investor/portal/documents/{$document->id}/download")
+            ->assertOk()
+            ->assertHeader('content-type', 'application/pdf');
+    }
+
     public function test_upload_rejects_non_pdf_files(): void
     {
         Storage::fake('local');
