@@ -2,6 +2,7 @@
 
 namespace App\Mail;
 
+use App\Mail\Concerns\UsesEmailTemplate;
 use App\Models\Investor;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
@@ -13,7 +14,11 @@ use Illuminate\Queue\SerializesModels;
 
 class InvestorWelcomeMail extends Mailable
 {
-    use Queueable, SerializesModels;
+    use Queueable, SerializesModels, UsesEmailTemplate;
+
+    public const TEMPLATE_KEY = 'investor_welcome';
+
+    public const DEFAULT_SUBJECT = 'Welcome to Access Properties';
 
     public function __construct(public Investor $investor)
     {
@@ -22,7 +27,11 @@ class InvestorWelcomeMail extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Welcome to Access Properties',
+            subject: $this->templateSubject(
+                self::TEMPLATE_KEY,
+                self::DEFAULT_SUBJECT,
+                $this->templateData(),
+            ),
             replyTo: [
                 new Address('hello@ap.boston', 'Access Properties'),
             ],
@@ -31,13 +40,11 @@ class InvestorWelcomeMail extends Mailable
 
     public function content(): Content
     {
-        return new Content(
-            view: 'emails.investor-welcome',
-            text: 'emails.investor-welcome-text',
-            with: [
-                'firstName' => explode(' ', trim($this->investor->name))[0] ?? $this->investor->name,
-                'investorCode' => $this->investor->code,
-            ],
+        return $this->templateContent(
+            self::TEMPLATE_KEY,
+            'emails.investor-welcome',
+            'emails.investor-welcome-text',
+            $this->templateData(),
         );
     }
 
@@ -49,5 +56,18 @@ class InvestorWelcomeMail extends Mailable
                 'List-Unsubscribe-Post' => 'List-Unsubscribe=One-Click',
             ],
         );
+    }
+
+    /**
+     * Variables exposed to the template. Keep in sync with the `variables`
+     * column seeded for this key so the admin UI documents them accurately.
+     */
+    public function templateData(): array
+    {
+        return [
+            'firstName' => explode(' ', trim($this->investor->name))[0] ?? $this->investor->name,
+            'investorCode' => $this->investor->code,
+            'investor' => $this->investor,
+        ];
     }
 }

@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\AgreementController;
 use App\Http\Controllers\Admin\AuthController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\EmailLogController;
+use App\Http\Controllers\Admin\EmailTemplateController;
 use App\Http\Controllers\Admin\InvestorController;
 use App\Http\Controllers\Admin\InvestorIntegrationController;
 use App\Http\Controllers\Admin\InvestorOverrideController;
@@ -125,6 +126,14 @@ Route::prefix('admin')->group(function () {
         Route::post('/kyc-verification/{code}/review', [KycController::class, 'review']);
 
         Route::get('/email-logs', [EmailLogController::class, 'index']);
+
+        // Admin-editable transactional email templates
+        Route::get('/email-templates', [EmailTemplateController::class, 'index']);
+        Route::get('/email-templates/{key}', [EmailTemplateController::class, 'show']);
+        Route::put('/email-templates/{key}', [EmailTemplateController::class, 'update']);
+        Route::post('/email-templates/{key}/preview', [EmailTemplateController::class, 'preview']);
+        Route::post('/email-templates/{key}/test', [EmailTemplateController::class, 'test'])->middleware('throttle:10,1');
+        Route::post('/email-templates/{key}/reset', [EmailTemplateController::class, 'reset']);
 
         Route::get('/settings', [SettingsController::class, 'show']);
         Route::put('/settings', [SettingsController::class, 'update']);
