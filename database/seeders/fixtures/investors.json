@@ -26,7 +26,7 @@
       "residency": "U.S. Person"
     },
     "investmentInfo": {
-      "fundName": "Access Properties Diversified Income Fund I",
+      "fundName": "Access Real Estate Fund I",
       "commitment": 250000,
       "funded": 250000,
       "walletStatus": "Funds received",
@@ -106,7 +106,7 @@
       "residency": "U.S. Person"
     },
     "investmentInfo": {
-      "fundName": "Access Properties Diversified Income Fund I",
+      "fundName": "Access Real Estate Fund I",
       "commitment": 150000,
       "funded": 0,
       "walletStatus": "Awaiting capital call",
@@ -180,7 +180,7 @@
       "residency": "Non-U.S. Person"
     },
     "investmentInfo": {
-      "fundName": "Access Properties Diversified Income Fund I",
+      "fundName": "Access Real Estate Fund I",
       "commitment": 50000,
       "funded": 0,
       "walletStatus": "KYC required",
@@ -234,7 +234,7 @@
       "residency": "U.S. Person"
     },
     "investmentInfo": {
-      "fundName": "Access Properties Diversified Income Fund I",
+      "fundName": "Access Real Estate Fund I",
       "commitment": 400000,
       "funded": 150000,
       "walletStatus": "Partial funding received",
@@ -294,7 +294,7 @@
       "residency": "U.S. Person"
     },
     "investmentInfo": {
-      "fundName": "Access Properties Diversified Income Fund I",
+      "fundName": "Access Real Estate Fund I",
       "commitment": 90000,
       "funded": 0,
       "walletStatus": "On hold",
@@ -355,7 +355,7 @@
       "residency": "U.S. Person"
     },
     "investmentInfo": {
-      "fundName": "Access Properties Diversified Income Fund I",
+      "fundName": "Access Real Estate Fund I",
       "commitment": 320000,
       "funded": 0,
       "walletStatus": "Awaiting final partner review",
@@ -422,7 +422,7 @@
       "residency": "U.S. Person"
     },
     "investmentInfo": {
-      "fundName": "Access Properties Diversified Income Fund I",
+      "fundName": "Access Real Estate Fund I",
       "commitment": 180000,
       "funded": 180000,
       "walletStatus": "Fully funded",
@@ -476,7 +476,7 @@
       "residency": "Non-U.S. Person"
     },
     "investmentInfo": {
-      "fundName": "Access Properties Diversified Income Fund I",
+      "fundName": "Access Real Estate Fund I",
       "commitment": 275000,
       "funded": 80000,
       "walletStatus": "Awaiting final tranche",

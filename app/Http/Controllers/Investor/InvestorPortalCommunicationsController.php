@@ -19,7 +19,7 @@ class InvestorPortalCommunicationsController extends Controller
         } elseif ($investor->accreditation_status === 'non_accredited') {
             $audienceTags[] = 'non_accredited';
         }
-        // Fund-scoped audience tags like "fund:apdif-1"
+        // Fund-scoped audience tags like "fund:aref-i"
         foreach ($investor->holdings()->with('fund')->get() as $h) {
             $audienceTags[] = 'fund:'.$h->fund->code;
         }

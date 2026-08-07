@@ -77,7 +77,7 @@ class InvestorRegistrationController extends Controller
                 'personal_tax_id_last4' => null,
                 'personal_residency' => $isUS ? 'U.S. Person' : 'Non-U.S. Person',
                 'experience' => $data['experience'],
-                'investment_fund_name' => 'Access Properties Diversified Income Fund I',
+                'investment_fund_name' => 'Access Real Estate Fund I',
                 'investment_commitment' => $data['investmentAmount'],
                 'investment_funded' => 0,
                 'investment_wallet_status' => 'KYC required',

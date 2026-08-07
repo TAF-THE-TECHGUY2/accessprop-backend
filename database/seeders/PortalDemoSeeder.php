@@ -25,9 +25,9 @@ class PortalDemoSeeder extends Seeder
     public function run(): void
     {
         $fund = Fund::updateOrCreate(
-            ['code' => 'apdif-1'],
+            ['code' => 'aref-i'],
             [
-                'name' => 'Access Properties Diversified Income Fund I',
+                'name' => 'Access Real Estate Fund I',
                 'description' => 'A diversified real estate fund targeting stable income and capital appreciation through a portfolio of multi-family and commercial properties.',
                 'fund_type' => 'Diversified Income',
                 'status' => 'active',

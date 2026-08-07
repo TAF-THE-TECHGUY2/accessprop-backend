@@ -92,7 +92,7 @@ class DocusignSendTestEnvelope extends Command
             'personal_investor_type' => 'Individual',
             'personal_residency' => 'Non-U.S. Person',
             'experience' => 'new',
-            'investment_fund_name' => 'Access Properties Diversified Income Fund I',
+            'investment_fund_name' => 'Access Real Estate Fund I',
             'investment_commitment' => 25000,
             'investment_funded' => 0,
             'investment_wallet_status' => 'KYC required',
