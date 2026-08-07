@@ -1071,15 +1071,22 @@ class InvestorProcessingService
                 ]);
             }
 
-            $updates = [
+            $this->updateInvestor($investor, [
                 'investment_status' => 'funds_confirmed',
                 'investment_wallet_status' => 'Funds confirmed',
-            ];
-            // Pre-ledger fallback only — see activateInvestment().
-            if (! $this->hasLedgerHistory($investor)) {
-                $updates['investment_funded'] = $investor->investment_commitment;
-            }
-            $this->updateInvestor($investor, $updates);
+            ]);
+
+            // Confirming receipt is a funding event, so it must mint units like
+            // every other one. Previously this method set investment_funded from
+            // the commitment and stopped there, leaving the investor marked
+            // fully funded with no ledger entry, no holding, and an empty
+            // portfolio in the portal. upsertHoldingFromFunding also derives
+            // investment_funded, so the figure and the position cannot diverge.
+            $this->upsertHoldingFromFunding(
+                $investor,
+                (float) ($payment->amount ?: $investor->investment_commitment),
+                'confirm-funds-received'
+            );
 
             $this->logActivity(
                 $investor,
@@ -1252,13 +1259,12 @@ class InvestorProcessingService
             if ($investor->accreditation_status === 'accredited') {
                 $updates['accreditation_verification_status'] = 'verification_approved';
                 $updates['document_signing_status'] = 'completed';
-                // Pre-ledger fallback only. Assigning the commitment to an
-                // investor who has real transactions would discard every top-up
-                // the ledger has already accounted for.
-                if (! $this->hasLedgerHistory($investor)) {
-                    $updates['investment_funded'] = $investor->investment_commitment;
-                }
             }
+
+            // Activation deliberately does not touch investment_funded. It used
+            // to assign the commitment here, which invented a funded figure for
+            // investors who had never paid and double-counted for those who had.
+            // Money is recorded only by funding events, which write the ledger.
 
             $this->updateInvestor($investor, $updates);
 
@@ -1635,21 +1641,6 @@ class InvestorProcessingService
         $this->updateInvestor($investor, ['investment_funded' => round($funded, 2)]);
     }
 
-    /**
-     * Whether this investor has any ledger history at all.
-     *
-     * The activation and manual funds-confirmation paths predate the ledger and
-     * still fall back to the commitment amount. That fallback must never fire
-     * for an investor who has real transactions — it would overwrite a derived
-     * total with a figure that ignores every top-up.
-     */
-    private function hasLedgerHistory(Investor $investor): bool
-    {
-        return FundTransaction::query()
-            ->where('investor_id', $investor->id)
-            ->whereIn('type', FundTransaction::INFLOW_TYPES)
-            ->exists();
-    }
 
     /**
      * Resolve the fund an investor subscribes to via an explicit FK.
