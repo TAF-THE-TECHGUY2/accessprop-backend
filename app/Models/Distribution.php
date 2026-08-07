@@ -14,8 +14,17 @@ class Distribution extends Model
         'paid_at' => 'datetime',
     ];
 
-    public function fundHolding(): BelongsTo
+    /**
+     * Distributions hang off (fund_id, investor_id), not fund_holdings — that
+     * table is a rebuildable read cache and must not own financial history.
+     */
+    public function fund(): BelongsTo
     {
-        return $this->belongsTo(FundHolding::class);
+        return $this->belongsTo(Fund::class);
+    }
+
+    public function investor(): BelongsTo
+    {
+        return $this->belongsTo(Investor::class);
     }
 }

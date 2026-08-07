@@ -53,7 +53,7 @@ class AdminFundController extends Controller
                 'price' => (float) $p->price,
             ]),
             'recentDistributions' => Distribution::query()
-                ->whereHas('fundHolding', fn ($q) => $q->where('fund_id', $fund->id))
+                ->where('fund_id', $fund->id)
                 ->orderByDesc('paid_at')
                 ->limit(20)
                 ->get()
@@ -62,10 +62,10 @@ class AdminFundController extends Controller
                     'paidAt' => optional($d->paid_at)->toDateString(),
                     'amount' => (float) $d->amount,
                     'type' => $d->distribution_type,
-                    'holdingId' => $d->fund_holding_id,
+                    'investorId' => $d->investor_id,
                 ]),
             'recentFees' => FundFee::query()
-                ->whereHas('fundHolding', fn ($q) => $q->where('fund_id', $fund->id))
+                ->where('fund_id', $fund->id)
                 ->orderByDesc('period_end')
                 ->limit(20)
                 ->get()
@@ -75,7 +75,7 @@ class AdminFundController extends Controller
                     'amount' => (float) $f->amount,
                     'periodStart' => $f->period_start->toDateString(),
                     'periodEnd' => $f->period_end->toDateString(),
-                    'holdingId' => $f->fund_holding_id,
+                    'investorId' => $f->investor_id,
                 ]),
             'documents' => PortalDocument::query()
                 ->where('scope', 'fund')
@@ -217,8 +217,8 @@ class AdminFundController extends Controller
         $impact = [
             'holdings' => $fund->holdings()->count(),
             'unitPrices' => $fund->unitPrices()->count(),
-            'distributions' => Distribution::whereHas('fundHolding', fn ($q) => $q->where('fund_id', $fund->id))->count(),
-            'fees' => FundFee::whereHas('fundHolding', fn ($q) => $q->where('fund_id', $fund->id))->count(),
+            'distributions' => Distribution::where('fund_id', $fund->id)->count(),
+            'fees' => FundFee::where('fund_id', $fund->id)->count(),
             'documents' => PortalDocument::where('fund_id', $fund->id)->count(),
         ];
 
@@ -262,7 +262,8 @@ class AdminFundController extends Controller
                 $amount = round((float) $h->units * (float) $data['amountPerUnit'], 2);
 
                 Distribution::create([
-                    'fund_holding_id' => $h->id,
+                    'fund_id' => $fund->id,
+                    'investor_id' => $h->investor_id,
                     'amount' => $amount,
                     'paid_at' => $data['paidAt'],
                     'distribution_type' => $data['distributionType'] ?? 'income',
@@ -330,7 +331,8 @@ class AdminFundController extends Controller
                 }
 
                 FundFee::create([
-                    'fund_holding_id' => $h->id,
+                    'fund_id' => $fund->id,
+                    'investor_id' => $h->investor_id,
                     'fee_type' => $data['feeType'],
                     'amount' => $amount,
                     'period_start' => $data['periodStart'],

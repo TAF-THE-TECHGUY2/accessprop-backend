@@ -15,8 +15,17 @@ class FundFee extends Model
         'period_end' => 'date',
     ];
 
-    public function fundHolding(): BelongsTo
+    /**
+     * Fees hang off (fund_id, investor_id), not fund_holdings — that table is a
+     * rebuildable read cache and must not own financial history.
+     */
+    public function fund(): BelongsTo
     {
-        return $this->belongsTo(FundHolding::class);
+        return $this->belongsTo(Fund::class);
+    }
+
+    public function investor(): BelongsTo
+    {
+        return $this->belongsTo(Investor::class);
     }
 }
