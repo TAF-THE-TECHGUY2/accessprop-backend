@@ -31,9 +31,14 @@ class AdminFundController extends Controller
 
     public function show(string $code): JsonResponse
     {
+        // reorder() is required: the unitPrices() relation already applies
+        // orderBy('as_of_date') ascending, and appending orderByDesc only adds a
+        // second ORDER BY term. MySQL honours the first, so without reorder()
+        // this sorts OLDEST first — and ->first() below then values the whole
+        // fund at its inception price. See Fund::currentUnitPrice().
         $fund = Fund::where('code', $code)
             ->withCount('holdings')
-            ->with(['unitPrices' => fn ($q) => $q->orderByDesc('as_of_date')])
+            ->with(['unitPrices' => fn ($q) => $q->reorder()->orderByDesc('as_of_date')])
             ->firstOrFail();
 
         $holdings = FundHolding::where('fund_id', $fund->id)->get();
