@@ -100,34 +100,51 @@ class InvestorPortalDocumentsController extends Controller
         return redirect()->away($document->file_url);
     }
 
+    /**
+     * Funds whose documents this investor may see.
+     *
+     * Resolution order matters:
+     *
+     *   1. investors.fund_id — the fund they subscribed to. Authoritative, and
+     *      set at registration, so it works before any units are held.
+     *   2. Funds they hold units in — covers anyone who has since invested in
+     *      something other than their original subscription.
+     *   3. investment_fund_name — legacy fallback only. This is a denormalised
+     *      copy of funds.name and it has already drifted once in production,
+     *      leaving investors unresolvable. It stays only for rows predating
+     *      fund_id and should be removed once those are backfilled.
+     */
     private function accessibleFundIds(Investor $investor): Collection
     {
-        $fundIds = $investor->holdings()->pluck('fund_id');
+        $fundIds = collect();
 
-        if (! empty($investor->investment_fund_name)) {
-            $selectedFundId = Fund::query()
+        if (! empty($investor->fund_id)) {
+            $fundIds->push($investor->fund_id);
+        }
+
+        $fundIds = $fundIds->merge($investor->holdings()->pluck('fund_id'));
+
+        if ($fundIds->isEmpty() && ! empty($investor->investment_fund_name)) {
+            $legacyFundId = Fund::query()
                 ->where('name', $investor->investment_fund_name)
                 ->value('id');
 
-            if ($selectedFundId) {
-                $fundIds->push($selectedFundId);
+            if ($legacyFundId) {
+                $fundIds->push($legacyFundId);
             }
         }
 
-        // Registration currently defaults every investor to the active
-        // offering by name. Keep pre-commitment access working if an admin has
-        // renamed that fund since the investor registered.
+        // Last resort for a legacy row with neither a fund_id nor a matching
+        // name: fall back to the single open offering so pre-commitment access
+        // keeps working. Only safe while exactly one fund is active.
         if ($fundIds->isEmpty()) {
-            $activeFundId = Fund::query()
-                ->where('status', 'active')
-                ->orderBy('id')
-                ->value('id');
+            $active = Fund::query()->where('status', 'active')->pluck('id');
 
-            if ($activeFundId) {
-                $fundIds->push($activeFundId);
+            if ($active->count() === 1) {
+                $fundIds->push($active->first());
             }
         }
 
-        return $fundIds->unique()->values();
+        return $fundIds->filter()->unique()->values();
     }
 }

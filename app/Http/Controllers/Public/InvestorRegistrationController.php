@@ -5,12 +5,14 @@ namespace App\Http\Controllers\Public;
 use App\Http\Controllers\Controller;
 use App\Mail\InvestorWelcomeMail;
 use App\Models\EmailLog;
+use App\Models\Fund;
 use App\Models\Investor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Validation\ValidationException;
 use Throwable;
 
 class InvestorRegistrationController extends Controller
@@ -39,12 +41,16 @@ class InvestorRegistrationController extends Controller
                 $request->input('accreditationStatus') === 'accredited' ? 'min:10000' : 'min:100',
             ],
             'receiveUpdates' => ['nullable', 'boolean'],
+            // Optional today because a single offering is open. Present so the
+            // flow does not need reworking when a second fund launches.
+            'fundCode' => ['nullable', 'string', 'max:100'],
         ]);
 
         $accreditation = $data['accreditationStatus'] === 'accredited' ? 'accredited' : 'non_accredited';
         $isUS = $data['country'] === 'United States';
+        $fund = $this->resolveOfferingFund($data['fundCode'] ?? null);
 
-        $investor = DB::transaction(function () use ($data, $accreditation, $isUS) {
+        $investor = DB::transaction(function () use ($data, $accreditation, $isUS, $fund) {
             $maxNum = (int) Investor::query()
                 ->selectRaw("MAX(CAST(SUBSTRING(code, 5) AS UNSIGNED)) as max_num")
                 ->value('max_num');
@@ -77,11 +83,15 @@ class InvestorRegistrationController extends Controller
                 'personal_tax_id_last4' => null,
                 'personal_residency' => $isUS ? 'U.S. Person' : 'Non-U.S. Person',
                 'experience' => $data['experience'],
-                'investment_fund_name' => 'Access Real Estate Fund I',
+                // fund_id is authoritative. investment_fund_name is a
+                // denormalised copy kept in sync for the read paths that still
+                // match on it; it must never be the source of truth again.
+                'fund_id' => $fund->id,
+                'investment_fund_name' => $fund->name,
                 'investment_commitment' => $data['investmentAmount'],
                 'investment_funded' => 0,
                 'investment_wallet_status' => 'KYC required',
-                'investment_expected_yield' => '8.0% target',
+                'investment_expected_yield' => $fund->target_yield ?? '8.0% target',
                 'investment_last_distribution' => null,
             ]);
 
@@ -106,6 +116,46 @@ class InvestorRegistrationController extends Controller
             'accreditationStatus' => $investor->accreditation_status,
             'token' => $token,
         ], 201);
+    }
+
+    /**
+     * The fund this registration subscribes to.
+     *
+     * Registration previously stored only a hardcoded fund name string. When
+     * that string drifted from funds.name — as it did in production — the
+     * investor had no resolvable fund and hit a hard failure at funding time.
+     * The FK is now set at registration so the link can never be ambiguous.
+     *
+     * Fails the registration rather than guessing. An investor created without
+     * a fund cannot fund, so a clear error here beats a broken account later.
+     *
+     * @throws ValidationException
+     */
+    private function resolveOfferingFund(?string $fundCode): Fund
+    {
+        if ($fundCode !== null && $fundCode !== '') {
+            $fund = Fund::where('code', $fundCode)->first();
+
+            if (! $fund) {
+                throw ValidationException::withMessages([
+                    'fundCode' => "No fund exists with code '{$fundCode}'.",
+                ]);
+            }
+
+            return $fund;
+        }
+
+        $active = Fund::where('status', 'active')->get();
+
+        if ($active->count() === 1) {
+            return $active->first();
+        }
+
+        throw ValidationException::withMessages([
+            'fundCode' => $active->isEmpty()
+                ? 'No active fund is currently open for investment.'
+                : 'More than one fund is open; a fundCode is required to register.',
+        ]);
     }
 
     private function sendWelcomeEmail(Investor $investor): void
