@@ -1643,49 +1643,12 @@ class InvestorProcessingService
 
     /**
      * Rebuild the fund_holdings cache row for one investor/fund pair from the
-     * ledger.
-     *
-     * Uses updateOrCreate and never deletes. Nothing depends on holding ids any
-     * more after the reparenting migration, but a zero-unit holding is still
-     * meaningful — documents and communications gating currently reads it, and a
-     * fully-redeemed investor must not silently lose access to their records.
-     * Changing that is a deliberate decision for a later commit.
+     * ledger. Implementation lives on the model so the seeder, the backfill
+     * command and this service all derive positions the same way.
      */
     private function recomputeHoldingFromLedger(int $investorId, int $fundId): void
     {
-        $transactions = FundTransaction::query()
-            ->where('investor_id', $investorId)
-            ->where('fund_id', $fundId)
-            ->orderBy('transaction_date')
-            ->orderBy('id')
-            ->get();
-
-        if ($transactions->isEmpty()) {
-            return;
-        }
-
-        // Units are signed, so redemptions subtract naturally.
-        $units = round((float) $transactions->sum('units'), 6);
-
-        // Cost basis counts inflows only — a redemption must not inflate it.
-        $invested = round(
-            (float) $transactions
-                ->filter(fn (FundTransaction $t) => $t->isInflow())
-                ->sum('gross_amount'),
-            2
-        );
-
-        $averagePrice = $units > 0 ? round($invested / $units, 4) : 0;
-
-        FundHolding::updateOrCreate(
-            ['investor_id' => $investorId, 'fund_id' => $fundId],
-            [
-                'units' => $units,
-                'amount_invested' => $invested,
-                'average_unit_price' => $averagePrice,
-                'first_invested_at' => $transactions->first()->transaction_date,
-            ]
-        );
+        FundHolding::rebuildFromLedger($investorId, $fundId);
     }
 
     private function freshInvestor(Investor $investor): Investor
