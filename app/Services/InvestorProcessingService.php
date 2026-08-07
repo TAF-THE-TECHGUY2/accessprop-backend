@@ -697,7 +697,14 @@ class InvestorProcessingService
         });
     }
 
-    public function releaseFundingInstructions(Investor $investor): Investor
+    /**
+     * Create a Stripe PaymentIntent for the investor to pay by ACH.
+     *
+     * $amount defaults to the original commitment, which is the onboarding case.
+     * A top-up passes an explicit amount instead — the commitment records what
+     * was pledged at signup and must not be rewritten by a later subscription.
+     */
+    public function releaseFundingInstructions(Investor $investor, ?float $amount = null): Investor
     {
         $stripe = $this->stripeClient();
 
@@ -730,8 +737,8 @@ class InvestorProcessingService
             });
         }
 
-        // Amount comes from the investor's commitment. Stripe expects cents.
-        $amountCents = (int) round(((float) $investor->investment_commitment) * 100);
+        // Stripe expects cents.
+        $amountCents = (int) round(($amount ?? (float) $investor->investment_commitment) * 100);
         if ($amountCents <= 0) {
             throw new \RuntimeException('Investor has no commitment amount set; cannot create Payment Intent.');
         }
@@ -765,14 +772,19 @@ class InvestorProcessingService
                 'released_at' => now(),
             ]);
 
-            $this->updateInvestor($investor, [
-                'investment_status' => 'awaiting_funding',
+            // An active investor adding to an existing position must stay
+            // active. Resetting them to awaiting_funding would drop them out of
+            // the portal and back into the onboarding tracker mid-top-up.
+            $isTopUp = $investor->investment_status === 'active';
+
+            $this->updateInvestor($investor, array_filter([
+                'investment_status' => $isTopUp ? null : 'awaiting_funding',
                 'investment_wallet_status' => 'Awaiting ACH payment',
-            ]);
+            ]));
 
             $this->createMessage(
                 $investor,
-                'Time to fund your subscription',
+                $isTopUp ? 'Your additional subscription is ready to fund' : 'Time to fund your subscription',
                 'Your funding step is unlocked. Link your bank to complete payment via ACH.'
             );
 
@@ -787,6 +799,74 @@ class InvestorProcessingService
                 ),
                 ['fundingInstructionId' => $instruction->id, 'paymentIntentId' => $intent->id]
             );
+
+            return $this->freshInvestor($investor);
+        });
+    }
+
+    /**
+     * Settle a payment without touching Stripe, for demo environments.
+     *
+     * Deliberately routed through the same ledger write as a real settlement:
+     * a demo that fabricated holdings directly would not exercise pricing,
+     * premium capture, or the holding rebuild, and would therefore prove
+     * nothing about the real flow.
+     *
+     * The caller is responsible for checking demo mode is enabled. This method
+     * records capital that was never received, so it must never be reachable
+     * without that gate.
+     */
+    public function simulateFundingPayment(Investor $investor, float $amount, ?string $reason = null): Investor
+    {
+        if ($amount <= 0) {
+            throw new \InvalidArgumentException('amount must be greater than zero');
+        }
+
+        return DB::transaction(function () use ($investor, $amount, $reason) {
+            $instruction = FundingInstruction::create([
+                'investor_profile_id' => $investor->id,
+                'status' => 'succeeded',
+                'provider' => 'demo',
+                'provider_intent_id' => 'demo_'.$investor->code.'_'.now()->timestamp,
+                'amount_cents' => (int) round($amount * 100),
+                'currency' => 'usd',
+                'instructions' => 'Demo payment — no funds were transferred.',
+                'delivery_channel' => 'app',
+                'released_at' => now(),
+            ]);
+
+            PaymentConfirmation::create([
+                'investor_profile_id' => $investor->id,
+                'status' => 'confirmed',
+                'amount' => $amount,
+                'reference' => $instruction->provider_intent_id,
+                'notes' => 'DEMO PAYMENT — no funds were transferred. '.($reason ?? ''),
+                'confirmed_at' => now(),
+            ]);
+
+            $isTopUp = $investor->investment_status === 'active';
+
+            $this->updateInvestor($investor, array_filter([
+                'investment_status' => $isTopUp ? null : 'funds_confirmed',
+                'investment_wallet_status' => 'Funds received (demo)',
+                'dashboard_status' => 'active',
+            ]));
+
+            // Mints units and derives investment_funded, exactly as a real
+            // Stripe settlement does.
+            $this->upsertHoldingFromFunding($investor, $amount, 'demo');
+
+            $this->logActivity(
+                $investor,
+                'demo_payment',
+                'Demo payment recorded',
+                sprintf('Demo mode settled $%s without a real payment.', number_format($amount, 2)),
+                ['fundingInstructionId' => $instruction->id, 'amount' => $amount]
+            );
+
+            if (! $isTopUp) {
+                $this->activateInvestment($investor->fresh());
+            }
 
             return $this->freshInvestor($investor);
         });
@@ -900,10 +980,13 @@ class InvestorProcessingService
             switch ($eventType) {
                 case 'payment_intent.processing':
                     $instruction->update(['status' => 'processing', 'provider_payload' => $payload]);
-                    $this->updateInvestor($investor, [
-                        'investment_status' => 'funds_sent',
+                    // A top-up must not demote an already-active investor to
+                    // funds_sent — that would eject them from the portal back
+                    // into the onboarding tracker while their ACH settles.
+                    $this->updateInvestor($investor, array_filter([
+                        'investment_status' => $investor->investment_status === 'active' ? null : 'funds_sent',
                         'investment_wallet_status' => 'ACH debit submitted',
-                    ]);
+                    ]));
                     PaymentConfirmation::create([
                         'investor_profile_id' => $investor->id,
                         'status' => 'submitted',

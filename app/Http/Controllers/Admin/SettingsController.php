@@ -19,6 +19,7 @@ class SettingsController extends Controller
         'supportEmail' => 'support_email',
         'defaultCountry' => 'default_country',
         'allowParallelOnboarding' => 'allow_parallel_onboarding',
+        'demoPaymentsEnabled' => 'demo_payments_enabled',
     ];
 
     public function show(): JsonResponse
@@ -38,6 +39,7 @@ class SettingsController extends Controller
             'supportEmail' => ['sometimes', 'email'],
             'defaultCountry' => ['sometimes', 'string', 'max:255'],
             'allowParallelOnboarding' => ['sometimes', 'boolean'],
+            'demoPaymentsEnabled' => ['sometimes', 'boolean'],
         ]);
 
         $setting = Setting::singleton();
@@ -66,6 +68,7 @@ class SettingsController extends Controller
             'supportEmail' => $setting->support_email,
             'defaultCountry' => $setting->default_country,
             'allowParallelOnboarding' => $setting->allow_parallel_onboarding,
+            'demoPaymentsEnabled' => $setting->demo_payments_enabled,
         ];
     }
 }

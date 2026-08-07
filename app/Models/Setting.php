@@ -14,6 +14,7 @@ class Setting extends Model
         'notify_on_funding' => 'boolean',
         'auto_activate_dashboard' => 'boolean',
         'allow_parallel_onboarding' => 'boolean',
+        'demo_payments_enabled' => 'boolean',
     ];
 
     public static function singleton(): self
@@ -30,6 +31,7 @@ class Setting extends Model
                 'support_email' => 'ops@accessproperties.com',
                 'default_country' => 'United States',
                 'allow_parallel_onboarding' => false,
+                'demo_payments_enabled' => false,
             ],
         );
     }

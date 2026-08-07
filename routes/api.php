@@ -53,6 +53,7 @@ Route::prefix('investor')->group(function () {
         Route::post('/investready/start', [InvestReadyController::class, 'start']);
         Route::post('/investready/exchange', [InvestReadyController::class, 'exchange']);
         Route::post('/funding/payment-intent', [InvestorFundingController::class, 'paymentIntent']);
+        Route::post('/funding/simulate', [InvestorFundingController::class, 'simulate']);
         Route::get('/funding/status', [InvestorFundingController::class, 'status']);
 
         Route::get('/portal/profile', [InvestorPortalProfileController::class, 'show']);
