@@ -923,8 +923,10 @@ class InvestorProcessingService
                 case 'payment_intent.succeeded':
                     $instruction->update(['status' => 'succeeded', 'provider_payload' => $payload]);
                     $amount = ($instruction->amount_cents ?? 0) / 100;
+                    // investment_funded is derived from the ledger by
+                    // upsertHoldingFromFunding below, so a top-up adds to the
+                    // running total instead of replacing it.
                     $this->updateInvestor($investor, [
-                        'investment_funded' => $amount,
                         'investment_wallet_status' => 'Funds received',
                     ]);
                     PaymentConfirmation::query()
@@ -1069,11 +1071,15 @@ class InvestorProcessingService
                 ]);
             }
 
-            $this->updateInvestor($investor, [
+            $updates = [
                 'investment_status' => 'funds_confirmed',
                 'investment_wallet_status' => 'Funds confirmed',
-                'investment_funded' => $investor->investment_commitment,
-            ]);
+            ];
+            // Pre-ledger fallback only — see activateInvestment().
+            if (! $this->hasLedgerHistory($investor)) {
+                $updates['investment_funded'] = $investor->investment_commitment;
+            }
+            $this->updateInvestor($investor, $updates);
 
             $this->logActivity(
                 $investor,
@@ -1246,7 +1252,12 @@ class InvestorProcessingService
             if ($investor->accreditation_status === 'accredited') {
                 $updates['accreditation_verification_status'] = 'verification_approved';
                 $updates['document_signing_status'] = 'completed';
-                $updates['investment_funded'] = $investor->investment_commitment;
+                // Pre-ledger fallback only. Assigning the commitment to an
+                // investor who has real transactions would discard every top-up
+                // the ledger has already accounted for.
+                if (! $this->hasLedgerHistory($investor)) {
+                    $updates['investment_funded'] = $investor->investment_commitment;
+                }
             }
 
             $this->updateInvestor($investor, $updates);
@@ -1414,8 +1425,9 @@ class InvestorProcessingService
                 'notes' => 'Manual override: '.$reason,
             ]);
 
+            // investment_funded is derived from the ledger inside
+            // upsertHoldingFromFunding, so repeated overrides accumulate.
             $this->updateInvestor($investor, [
-                'investment_funded' => $amount,
                 'investment_status' => 'funds_confirmed',
                 'investment_wallet_status' => 'Funds received (manual override)',
                 'dashboard_status' => 'active',
@@ -1462,9 +1474,8 @@ class InvestorProcessingService
                 'dashboard_status' => 'active',
                 'investment_wallet_status' => 'Funds received (manual override)',
             ];
-            if ($resolvedAmount > 0) {
-                $updates['investment_funded'] = $resolvedAmount;
-            }
+            // investment_funded is derived from the ledger by
+            // upsertHoldingFromFunding below when $resolvedAmount > 0.
             $this->updateInvestor($investor, $updates);
 
             if ($resolvedAmount > 0) {
@@ -1597,6 +1608,47 @@ class InvestorProcessingService
         ]);
 
         $this->recomputeHoldingFromLedger($investor->id, (int) $fund->id);
+        $this->syncInvestmentFundedFromLedger($investor);
+    }
+
+    /**
+     * Recompute investors.investment_funded from the ledger.
+     *
+     * Every funding path used to assign this column the amount of the payment it
+     * had just handled. That is correct exactly once: the second time an investor
+     * added money, the running total was replaced by the top-up rather than
+     * increased by it, so a $25k investor who added $5k read as having funded
+     * $5k while the ledger correctly held $30k.
+     *
+     * Summing inflows mirrors how FundHolding derives amount_invested, so the
+     * investor summary and the position can no longer disagree. Redemptions are
+     * excluded for the same reason they are there — this is capital contributed,
+     * not a net balance.
+     */
+    private function syncInvestmentFundedFromLedger(Investor $investor): void
+    {
+        $funded = (float) FundTransaction::query()
+            ->where('investor_id', $investor->id)
+            ->whereIn('type', FundTransaction::INFLOW_TYPES)
+            ->sum('gross_amount');
+
+        $this->updateInvestor($investor, ['investment_funded' => round($funded, 2)]);
+    }
+
+    /**
+     * Whether this investor has any ledger history at all.
+     *
+     * The activation and manual funds-confirmation paths predate the ledger and
+     * still fall back to the commitment amount. That fallback must never fire
+     * for an investor who has real transactions — it would overwrite a derived
+     * total with a figure that ignores every top-up.
+     */
+    private function hasLedgerHistory(Investor $investor): bool
+    {
+        return FundTransaction::query()
+            ->where('investor_id', $investor->id)
+            ->whereIn('type', FundTransaction::INFLOW_TYPES)
+            ->exists();
     }
 
     /**

@@ -123,6 +123,11 @@ class InvestorController extends Controller
             'investment_amount' => $data['commitment'],
             'investment_commitment' => $data['commitment'],
             'investment_funded' => 0,
+            // fund_id is authoritative; investment_fund_name is a denormalised
+            // copy for the read paths that still match on it. Setting only the
+            // name leaves the investor unfundable — resolveFundForInvestor()
+            // refuses to guess a fund from a string.
+            'fund_id' => $fund->id,
             'investment_fund_name' => $fund->name,
             'investment_wallet_status' => 'Awaiting capital call',
             'investment_expected_yield' => $fund->target_yield ?? '8.0% target',
