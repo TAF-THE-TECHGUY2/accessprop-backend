@@ -24,8 +24,17 @@ class Fund extends Model
         return $this->hasMany(FundUnitPrice::class)->orderBy('as_of_date');
     }
 
+    /**
+     * Most recently published unit price.
+     *
+     * reorder() is required: the unitPrices() relation applies orderBy ascending,
+     * and chaining latest() only appends a second ORDER BY term. MySQL honours
+     * the first, so this previously returned the OLDEST price — meaning units
+     * were minted at the inception valuation while the portal displayed the
+     * current one.
+     */
     public function currentUnitPrice(): ?FundUnitPrice
     {
-        return $this->unitPrices()->latest('as_of_date')->first();
+        return $this->unitPrices()->reorder()->orderByDesc('as_of_date')->first();
     }
 }
