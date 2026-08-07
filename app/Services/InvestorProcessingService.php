@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Fund;
 use App\Models\FundHolding;
+use App\Models\FundTransaction;
 use App\Models\FundingInstruction;
 use App\Models\IntegrationRequest;
 use App\Models\Investor;
@@ -20,6 +21,7 @@ use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use RuntimeException;
 
 class InvestorProcessingService
 {
@@ -1542,68 +1544,148 @@ class InvestorProcessingService
     }
 
     /**
-     * Create or top up a FundHolding for an investor based on a funded amount.
-     * Uses the fund identified by the investor's investment_fund_name (falls
-     * back to the first active fund). Units are computed at the latest NAV.
+     * Record a funded amount as a subscription in the fund_transactions ledger,
+     * then recompute the fund_holdings read cache from it.
      *
-     * Safe to call multiple times — re-runs update the holding additively.
+     * The ledger is the source of truth from this commit forward — this method
+     * never writes to fund_holdings directly.
+     *
+     * Throws rather than guessing. All three callers wrap this in a
+     * DB::transaction, so a throw rolls the funding update back atomically
+     * instead of leaving an investor marked funded with no units.
+     *
+     * @throws RuntimeException when the fund or its unit price cannot be resolved
      */
-    private function upsertHoldingFromFunding(Investor $investor, float $amount): void
+    private function upsertHoldingFromFunding(Investor $investor, float $amount, ?string $source = null): void
     {
         if ($amount <= 0) {
             return;
         }
 
-        // Pick the fund: match by name first, otherwise fall back to any active fund.
-        $fund = null;
-        if (! empty($investor->investment_fund_name)) {
-            $fund = Fund::where('name', $investor->investment_fund_name)->first();
+        $fund = $this->resolveFundForInvestor($investor);
+        $bookValue = $this->requireCurrentBookValue($fund);
+
+        // No premium is applied here: the funding path has never captured one.
+        // Premium-bearing issuances are recorded through the admin ledger entry
+        // path, which supplies book_value_at_purchase and premium_pct explicitly.
+        $units = round($amount / $bookValue, 6);
+
+        FundTransaction::create([
+            'investor_id' => $investor->id,
+            'fund_id' => $fund->id,
+            'transaction_date' => now()->toDateString(),
+            'type' => FundTransaction::TYPE_SUBSCRIPTION,
+            'units' => $units,
+            'book_value_at_purchase' => $bookValue,
+            'premium_pct' => null,
+            'price_per_unit' => $bookValue,
+            'gross_amount' => round($amount, 2),
+            'source' => $source,
+        ]);
+
+        $this->recomputeHoldingFromLedger($investor->id, (int) $fund->id);
+    }
+
+    /**
+     * Resolve the fund an investor subscribes to via an explicit FK.
+     *
+     * Replaces the previous behaviour of string-matching investment_fund_name
+     * and falling back to "the first active fund" — that fallback could allocate
+     * an investor's capital to a fund they never subscribed to.
+     *
+     * @throws RuntimeException
+     */
+    private function resolveFundForInvestor(Investor $investor): Fund
+    {
+        if (empty($investor->fund_id)) {
+            throw new RuntimeException(sprintf(
+                'Investor %s has no fund_id set; refusing to guess which fund to allocate units in.',
+                $investor->code
+            ));
         }
-        $fund = $fund ?? Fund::where('status', 'active')->first();
+
+        $fund = Fund::find($investor->fund_id);
 
         if (! $fund) {
-            Log::warning('upsertHoldingFromFunding: no fund available', [
-                'investor' => $investor->code,
-                'amount' => $amount,
-            ]);
-            return;
+            throw new RuntimeException(sprintf(
+                'Investor %s references fund_id %s, which does not exist.',
+                $investor->code,
+                $investor->fund_id
+            ));
         }
 
-        $latestPrice = $fund->currentUnitPrice();
-        $price = (float) ($latestPrice?->price ?? 100.0);
+        return $fund;
+    }
+
+    /**
+     * Latest published book value for a fund.
+     *
+     * Previously defaulted to a hardcoded 100.0 when no price row existed, which
+     * minted units at an invented valuation — silent corruption of every
+     * downstream figure. A missing price is now a hard failure.
+     *
+     * @throws RuntimeException
+     */
+    private function requireCurrentBookValue(Fund $fund): float
+    {
+        $latest = $fund->currentUnitPrice();
+        $price = (float) ($latest->price ?? 0);
+
         if ($price <= 0) {
+            throw new RuntimeException(sprintf(
+                'Fund %s has no published unit price; refusing to mint units at an invented price.',
+                $fund->code
+            ));
+        }
+
+        return $price;
+    }
+
+    /**
+     * Rebuild the fund_holdings cache row for one investor/fund pair from the
+     * ledger.
+     *
+     * Uses updateOrCreate and never deletes. Nothing depends on holding ids any
+     * more after the reparenting migration, but a zero-unit holding is still
+     * meaningful — documents and communications gating currently reads it, and a
+     * fully-redeemed investor must not silently lose access to their records.
+     * Changing that is a deliberate decision for a later commit.
+     */
+    private function recomputeHoldingFromLedger(int $investorId, int $fundId): void
+    {
+        $transactions = FundTransaction::query()
+            ->where('investor_id', $investorId)
+            ->where('fund_id', $fundId)
+            ->orderBy('transaction_date')
+            ->orderBy('id')
+            ->get();
+
+        if ($transactions->isEmpty()) {
             return;
         }
 
-        $newUnits = round($amount / $price, 6);
+        // Units are signed, so redemptions subtract naturally.
+        $units = round((float) $transactions->sum('units'), 6);
 
-        $existing = FundHolding::where('investor_id', $investor->id)
-            ->where('fund_id', $fund->id)
-            ->first();
+        // Cost basis counts inflows only — a redemption must not inflate it.
+        $invested = round(
+            (float) $transactions
+                ->filter(fn (FundTransaction $t) => $t->isInflow())
+                ->sum('gross_amount'),
+            2
+        );
 
-        if ($existing) {
-            // Top up: blend the average price over the combined cost basis.
-            $prevAmount = (float) $existing->amount_invested;
-            $prevUnits = (float) $existing->units;
-            $totalUnits = round($prevUnits + $newUnits, 6);
-            $totalAmount = round($prevAmount + $amount, 2);
-            $avgPrice = $totalUnits > 0 ? round($totalAmount / $totalUnits, 4) : $price;
+        $averagePrice = $units > 0 ? round($invested / $units, 4) : 0;
 
-            $existing->update([
-                'units' => $totalUnits,
-                'amount_invested' => $totalAmount,
-                'average_unit_price' => $avgPrice,
-            ]);
-        } else {
-            FundHolding::create([
-                'investor_id' => $investor->id,
-                'fund_id' => $fund->id,
-                'units' => $newUnits,
-                'amount_invested' => $amount,
-                'average_unit_price' => $price,
-                'first_invested_at' => now(),
-            ]);
-        }
+        FundHolding::updateOrCreate(
+            ['investor_id' => $investorId, 'fund_id' => $fundId],
+            [
+                'units' => $units,
+                'amount_invested' => $invested,
+                'average_unit_price' => $averagePrice,
+                'first_invested_at' => $transactions->first()->transaction_date,
+            ]
+        );
     }
 
     private function freshInvestor(Investor $investor): Investor
