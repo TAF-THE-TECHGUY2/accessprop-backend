@@ -1565,10 +1565,23 @@ class InvestorProcessingService
         $fund = $this->resolveFundForInvestor($investor);
         $bookValue = $this->requireCurrentBookValue($fund);
 
-        // No premium is applied here: the funding path has never captured one.
-        // Premium-bearing issuances are recorded through the admin ledger entry
-        // path, which supplies book_value_at_purchase and premium_pct explicitly.
-        $units = round($amount / $bookValue, 6);
+        // Sale price = book value + the fund's current issuance premium. Both are
+        // snapshotted onto the transaction and never read back from the fund:
+        // book value is republished quarterly and the premium changes per
+        // issuance, so a later read would silently rewrite this entry price.
+        $premiumPct = (float) $fund->current_premium_pct;
+        $pricePerUnit = round($bookValue * (1 + ($premiumPct / 100)), 4);
+
+        if ($pricePerUnit <= 0) {
+            throw new RuntimeException(sprintf(
+                'Fund %s resolves to a non-positive sale price (book %.4f, premium %.3f%%).',
+                $fund->code,
+                $bookValue,
+                $premiumPct
+            ));
+        }
+
+        $units = round($amount / $pricePerUnit, 6);
 
         FundTransaction::create([
             'investor_id' => $investor->id,
@@ -1577,8 +1590,8 @@ class InvestorProcessingService
             'type' => FundTransaction::TYPE_SUBSCRIPTION,
             'units' => $units,
             'book_value_at_purchase' => $bookValue,
-            'premium_pct' => null,
-            'price_per_unit' => $bookValue,
+            'premium_pct' => $premiumPct,
+            'price_per_unit' => $pricePerUnit,
             'gross_amount' => round($amount, 2),
             'source' => $source,
         ]);
