@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Investor;
 use App\Http\Controllers\Controller;
 use App\Models\Fund;
 use App\Models\FundHolding;
+use App\Models\FundTransaction;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -85,12 +86,22 @@ class InvestorPortalInvestmentController extends Controller
                 ? (pow($annualisedFactor, 1 / $years) - 1) * 100
                 : 0;
 
+            $entry = $this->entrySummary($holding);
+
             return [
                 'fundCode' => $holding->fund->code,
                 'fundName' => $holding->fund->name,
                 'fundType' => $holding->fund->fund_type,
                 'targetYield' => $holding->fund->target_yield,
                 'amountInvested' => round($invested, 2),
+                // Ledger-derived entry data. Weighted across every subscription,
+                // so a second investment at a different premium is reflected.
+                'entryPrice' => $entry['entryPrice'],
+                'entryBookValue' => $entry['entryBookValue'],
+                'premiumPct' => $entry['premiumPct'],
+                'premiumPaid' => $entry['premiumPaid'],
+                'firstTransactionDate' => $entry['firstTransactionDate'],
+                'transactionCount' => $entry['transactionCount'],
                 'currentUnitPrice' => round($currentPrice, 4),
                 'totalUnits' => round((float) $holding->units, 6),
                 'percentOfPortfolio' => $totalCurrentValue > 0 ? round(($currentValue / $totalCurrentValue) * 100, 2) : 0,
@@ -107,6 +118,56 @@ class InvestorPortalInvestmentController extends Controller
         });
 
         return response()->json(['data' => $result]);
+    }
+
+    /**
+     * How the investor entered this position, read from the ledger.
+     *
+     * Weighted across every inflow so a second subscription at a different
+     * premium is reflected rather than hidden behind an average.
+     *
+     * premiumPaid is the dollar gap between what was paid and what those units
+     * were worth at book value on the day — which is exactly the day-one paper
+     * loss the portal has to explain.
+     */
+    private function entrySummary(FundHolding $holding): array
+    {
+        $inflows = FundTransaction::query()
+            ->where('investor_id', $holding->investor_id)
+            ->where('fund_id', $holding->fund_id)
+            ->whereIn('type', FundTransaction::INFLOW_TYPES)
+            ->orderBy('transaction_date')
+            ->orderBy('id')
+            ->get();
+
+        if ($inflows->isEmpty()) {
+            return [
+                'entryPrice' => null,
+                'entryBookValue' => null,
+                'premiumPct' => null,
+                'premiumPaid' => null,
+                'firstTransactionDate' => null,
+                'transactionCount' => 0,
+            ];
+        }
+
+        $units = (float) $inflows->sum('units');
+        $paid = (float) $inflows->sum('gross_amount');
+
+        // Value of those units at the book value ruling when each was bought.
+        $bookCost = (float) $inflows->reduce(
+            fn ($carry, FundTransaction $t) => $carry + ((float) $t->units * (float) $t->book_value_at_purchase),
+            0.0
+        );
+
+        return [
+            'entryPrice' => $units > 0 ? round($paid / $units, 4) : null,
+            'entryBookValue' => $units > 0 ? round($bookCost / $units, 4) : null,
+            'premiumPct' => $bookCost > 0 ? round((($paid - $bookCost) / $bookCost) * 100, 3) : 0.0,
+            'premiumPaid' => round($paid - $bookCost, 2),
+            'firstTransactionDate' => $inflows->first()->transaction_date->toDateString(),
+            'transactionCount' => $inflows->count(),
+        ];
     }
 
     public function performance(Request $request, string $fundCode): JsonResponse
@@ -189,7 +250,18 @@ class InvestorPortalInvestmentController extends Controller
 
         $fees = $holding->fees()->get();
 
+        // Disclosure requires three figures, not one: the rate, what was charged
+        // for the most recent period, and the cumulative total to date.
+        $aumFees = $fees->where('fee_type', 'aum')->sortByDesc('period_end');
+        $latestAum = $aumFees->first();
+
         return response()->json([
+            'aumRatePct' => (float) $holding->fund->aum_fee_annual_pct,
+            'aumCurrentPeriod' => $latestAum ? [
+                'amount' => (float) $latestAum->amount,
+                'periodStart' => $latestAum->period_start->toDateString(),
+                'periodEnd' => $latestAum->period_end->toDateString(),
+            ] : null,
             'aum' => $fees->where('fee_type', 'aum')->map(fn ($f) => [
                 'amount' => (float) $f->amount,
                 'periodStart' => $f->period_start->toDateString(),

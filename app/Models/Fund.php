@@ -13,6 +13,7 @@ class Fund extends Model
         'inception_date' => 'date',
         'minimum_investment' => 'decimal:2',
         'current_premium_pct' => 'decimal:3',
+        'aum_fee_annual_pct' => 'decimal:3',
     ];
 
     public function holdings(): HasMany
