@@ -18,6 +18,7 @@ use App\Services\Integrations\StripeClient;
 use App\Services\Integrations\VerifyInvestorClient;
 use Illuminate\Http\Client\RequestException;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -1485,6 +1486,56 @@ class InvestorProcessingService
         });
     }
 
+    /**
+     * Record a subscription that happened on a past date — an investor migrated
+     * from the pre-platform records, or an admin entering a historical position.
+     *
+     * Prices at the book value published on that date. A launch investor who put
+     * in $100,000 when units were $10.00 must be recorded as 10,000 units;
+     * pricing that at today's value would fabricate the unit count and every
+     * figure derived from it.
+     *
+     * priceOverride exists for entries the published series cannot express — a
+     * negotiated price, or a correction. Leave it null to use the derived value.
+     */
+    public function recordBackdatedSubscription(
+        Investor $investor,
+        float $amount,
+        Carbon|string $onDate,
+        ?float $priceOverride = null,
+        ?string $source = 'admin-entry',
+        $admin = null,
+    ): Investor {
+        return DB::transaction(function () use ($investor, $amount, $onDate, $priceOverride, $source, $admin) {
+            $this->upsertHoldingFromFunding($investor, $amount, $source, $onDate, $priceOverride);
+
+            $transaction = FundTransaction::where('investor_id', $investor->id)
+                ->orderByDesc('id')
+                ->first();
+
+            $this->logActivity(
+                $investor,
+                'backdated_subscription',
+                'Historical investment recorded',
+                sprintf(
+                    'Recorded $%s invested on %s at $%s per unit (%s units).',
+                    number_format($amount, 2),
+                    Carbon::parse($onDate)->toDateString(),
+                    number_format((float) $transaction->price_per_unit, 4),
+                    number_format((float) $transaction->units, 6),
+                ),
+                [
+                    'amount' => $amount,
+                    'transactionId' => $transaction->id,
+                    'priceOverridden' => $priceOverride !== null,
+                    'adminId' => $admin?->id,
+                ]
+            );
+
+            return $this->freshInvestor($investor);
+        });
+    }
+
     public function overrideMarkFunded(Investor $investor, float $amount, string $reason, $admin = null): Investor
     {
         if ($amount <= 0) {
@@ -1656,41 +1707,61 @@ class InvestorProcessingService
      *
      * @throws RuntimeException when the fund or its unit price cannot be resolved
      */
-    private function upsertHoldingFromFunding(Investor $investor, float $amount, ?string $source = null): void
-    {
+    private function upsertHoldingFromFunding(
+        Investor $investor,
+        float $amount,
+        ?string $source = null,
+        Carbon|string|null $onDate = null,
+        ?float $priceOverride = null,
+    ): void {
         if ($amount <= 0) {
             return;
         }
 
         $fund = $this->resolveFundForInvestor($investor);
-        $bookValue = $this->requireCurrentBookValue($fund);
 
-        // Sale price = book value + the fund's current issuance premium. Both are
-        // snapshotted onto the transaction and never read back from the fund:
-        // book value is republished quarterly and the premium changes per
+        // Price at the date of investment, not today. A launch investor who put
+        // in $100,000 when units were $10.00 holds 10,000 units — valuing that
+        // subscription at today's price would fabricate both the unit count and
+        // every return figure derived from it.
+        $date = Carbon::parse($onDate ?? now())->toDateString();
+        $bookValue = $this->requireBookValueAsOf($fund, $date);
+
+        // Both are snapshotted onto the transaction and never read back from the
+        // fund: book value is republished quarterly and the premium changes per
         // issuance, so a later read would silently rewrite this entry price.
         $premiumPct = (float) $fund->current_premium_pct;
-        $pricePerUnit = round($bookValue * (1 + ($premiumPct / 100)), 4);
+
+        $pricePerUnit = $priceOverride !== null
+            ? round($priceOverride, 4)
+            : round($bookValue * (1 + ($premiumPct / 100)), 4);
 
         if ($pricePerUnit <= 0) {
             throw new RuntimeException(sprintf(
-                'Fund %s resolves to a non-positive sale price (book %.4f, premium %.3f%%).',
+                'Fund %s resolves to a non-positive unit price on %s (book %.4f, premium %.3f%%).',
                 $fund->code,
+                $date,
                 $bookValue,
                 $premiumPct
             ));
         }
+
+        // An explicit override means the premium recorded on the row has to be
+        // derived from it, not copied from the fund, or the two would disagree.
+        $recordedPremium = $priceOverride !== null
+            ? round((($pricePerUnit - $bookValue) / $bookValue) * 100, 3)
+            : $premiumPct;
 
         $units = round($amount / $pricePerUnit, 6);
 
         FundTransaction::create([
             'investor_id' => $investor->id,
             'fund_id' => $fund->id,
-            'transaction_date' => now()->toDateString(),
+            'transaction_date' => $date,
             'type' => FundTransaction::TYPE_SUBSCRIPTION,
             'units' => $units,
             'book_value_at_purchase' => $bookValue,
-            'premium_pct' => $premiumPct,
+            'premium_pct' => $recordedPremium,
             'price_per_unit' => $pricePerUnit,
             'gross_amount' => round($amount, 2),
             'source' => $source,
@@ -1765,15 +1836,16 @@ class InvestorProcessingService
      *
      * @throws RuntimeException
      */
-    private function requireCurrentBookValue(Fund $fund): float
+    private function requireBookValueAsOf(Fund $fund, Carbon|string $date): float
     {
-        $latest = $fund->currentUnitPrice();
-        $price = (float) ($latest->price ?? 0);
+        $row = $fund->bookValueAsOf($date);
+        $price = (float) ($row->price ?? 0);
 
         if ($price <= 0) {
             throw new RuntimeException(sprintf(
-                'Fund %s has no published unit price; refusing to mint units at an invented price.',
-                $fund->code
+                'Fund %s has no published unit price on or before %s; refusing to mint units at an invented price.',
+                $fund->code,
+                Carbon::parse($date)->toDateString()
             ));
         }
 

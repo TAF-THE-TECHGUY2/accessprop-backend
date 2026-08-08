@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Admin\InvestorResource;
 use App\Models\Investor;
+use App\Services\InvestorProcessingService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -97,6 +98,13 @@ class InvestorController extends Controller
             'accreditationStatus' => ['required', 'string', 'in:accredited,non_accredited'],
             'commitment' => ['required', 'numeric', 'min:10000'],
             'fundCode' => ['required', 'string', 'exists:funds,code'],
+            // Supplying a date records the investment immediately, priced at the
+            // book value published on that date. Omit it to create the profile
+            // without a position — funding then happens through the normal flow.
+            'investmentDate' => ['nullable', 'date', 'before_or_equal:today'],
+            // Escape hatch for entries the published series cannot express.
+            // Defaults to the derived price when omitted.
+            'unitPriceOverride' => ['nullable', 'numeric', 'gt:0'],
         ]);
 
         if ($data['investorType'] !== 'Individual' && empty($data['entityName'])) {
@@ -158,6 +166,17 @@ class InvestorController extends Controller
             'description' => 'Admin manually created this investor profile via the admin panel.',
             'occurred_at' => now(),
         ]);
+
+        if (! empty($data['investmentDate'])) {
+            $investor = app(InvestorProcessingService::class)->recordBackdatedSubscription(
+                $investor,
+                (float) $data['commitment'],
+                $data['investmentDate'],
+                isset($data['unitPriceOverride']) ? (float) $data['unitPriceOverride'] : null,
+                'admin-create',
+                $request->user(),
+            );
+        }
 
         $investor->load([
             'documents', 'activities', 'messages', 'notes',

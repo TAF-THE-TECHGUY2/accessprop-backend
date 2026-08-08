@@ -102,6 +102,7 @@ Route::prefix('admin')->group(function () {
         Route::get('/funds', [AdminFundController::class, 'index']);
         Route::post('/funds', [AdminFundController::class, 'store']);
         Route::get('/funds/{code}', [AdminFundController::class, 'show']);
+        Route::get('/funds/{code}/price-preview', [AdminFundController::class, 'pricePreview']);
         Route::patch('/funds/{code}', [AdminFundController::class, 'update']);
         Route::delete('/funds/{code}', [AdminFundController::class, 'destroy']);
         Route::post('/funds/{code}/unit-prices', [AdminFundController::class, 'storeUnitPrice']);

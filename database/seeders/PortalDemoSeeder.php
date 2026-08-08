@@ -37,25 +37,41 @@ class PortalDemoSeeder extends Seeder
             ],
         );
 
-        // Quarterly book value: (assets + income − expenses − liabilities) ÷ units
-        // issued, published by the accountant. Scaled to the real fund — ~$13.00
-        // today, ~35% above the $9.63 inception valuation.
+        // AREF I published book value, as supplied by the fund manager.
+        //
+        // Dated to quarter END, which is when the accountant publishes. Earlier
+        // seeds used quarter-start dates and invented figures; both are replaced.
+        //
+        // The series is deliberately not monotonic — $11.74 falls to $10.24 across
+        // Q4 2023 → Q1 2024, and $13.16 falls to $12.24 across Q2 → Q3 2025. Real
+        // losses exist independent of any entry premium, and anything that assumes
+        // book value only rises is wrong.
         //
         // These are book values, not sale prices. A sale price is book value plus
-        // a per-issuance premium, which is recorded on the transaction rather than
-        // here.
+        // a per-issuance premium, recorded on the transaction rather than here.
         $prices = [
-            ['2024-01-01', 9.63, 'Q1 2024'],
-            ['2024-04-01', 9.85, 'Q2 2024'],
-            ['2024-07-01', 10.12, 'Q3 2024'],
-            ['2024-10-01', 10.38, 'Q4 2024'],
-            ['2025-01-01', 10.71, 'Q1 2025'],
-            ['2025-04-01', 11.05, 'Q2 2025'],
-            ['2025-07-01', 11.42, 'Q3 2025'],
-            ['2025-10-01', 11.83, 'Q4 2025'],
-            ['2026-01-01', 12.40, 'Q1 2026'],
-            ['2026-04-01', 13.00, 'Q2 2026'],
+            ['2023-03-31', 10.00, 'Q1 2023'],
+            ['2023-06-30', 11.03, 'Q2 2023'],
+            ['2023-09-30', 11.11, 'Q3 2023'],
+            ['2023-12-31', 11.74, 'Q4 2023'],
+            ['2024-03-31', 10.24, 'Q1 2024'],
+            ['2024-06-30', 10.57, 'Q2 2024'],
+            ['2024-09-30', 10.62, 'Q3 2024'],
+            ['2024-12-31', 10.49, 'Q4 2024'],
+            ['2025-03-31', 12.50, 'Q1 2025'],
+            ['2025-06-30', 13.16, 'Q2 2025'],
+            ['2025-09-30', 12.24, 'Q3 2025'],
+            ['2025-12-31', 12.65, 'Q4 2025'],
+            ['2026-03-31', 12.85, 'Q1 2026'],
+            ['2026-06-30', 13.25, 'Q2 2026'],
         ];
+
+        // Clear first: the previous seed used quarter-start dates, so
+        // updateOrCreate keyed on as_of_date would leave those rows behind and
+        // interleave two incompatible series.
+        FundUnitPrice::where('fund_id', $fund->id)
+            ->whereNotIn('as_of_date', array_column($prices, 0))
+            ->delete();
 
         foreach ($prices as [$date, $price, $label]) {
             FundUnitPrice::updateOrCreate(
@@ -70,10 +86,11 @@ class PortalDemoSeeder extends Seeder
             return;
         }
 
-        // Subscribed at inception book value with no premium, so the demo shows a
-        // clean ~35% gain. Written to the ledger; the holding row is derived from
-        // it rather than set directly.
-        $entryPrice = 9.63;
+        // A launch investor: subscribed at the Q1 2023 book value of $10.00 with no
+        // premium. Price is read from the published series at the investment date
+        // rather than hardcoded, so this stays correct if the series is revised.
+        $entryDate = '2023-03-31';
+        $entryPrice = (float) $fund->bookValueAsOf($entryDate)->price;
         $amount = (float) $investor->investment_commitment;
 
         FundTransaction::where('investor_id', $investor->id)
@@ -83,7 +100,7 @@ class PortalDemoSeeder extends Seeder
         FundTransaction::create([
             'investor_id' => $investor->id,
             'fund_id' => $fund->id,
-            'transaction_date' => '2024-01-01',
+            'transaction_date' => $entryDate,
             'type' => FundTransaction::TYPE_SUBSCRIPTION,
             'units' => round($amount / $entryPrice, 6),
             'book_value_at_purchase' => $entryPrice,

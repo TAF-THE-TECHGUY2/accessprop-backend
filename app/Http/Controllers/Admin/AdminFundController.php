@@ -399,4 +399,55 @@ class AdminFundController extends Controller
 
         return 'Q'.$c->quarter.' '.$c->year;
     }
+
+    /**
+     * Price and unit count an investment would receive on a given date.
+     *
+     * Lets the admin sanity-check the arithmetic before committing an entry —
+     * a wrong date silently produces a wrong unit count, and a wrong unit count
+     * is invisible until someone reconciles the position months later.
+     */
+    public function pricePreview(Request $request, string $code): JsonResponse
+    {
+        $fund = Fund::where('code', $code)->firstOrFail();
+
+        $data = $request->validate([
+            'date' => ['required', 'date'],
+            'amount' => ['nullable', 'numeric', 'gt:0'],
+            'unitPriceOverride' => ['nullable', 'numeric', 'gt:0'],
+        ]);
+
+        $row = $fund->bookValueAsOf($data['date']);
+
+        if (! $row) {
+            return response()->json([
+                'message' => sprintf(
+                    'No unit price is published on or before %s. The earliest is %s.',
+                    Carbon::parse($data['date'])->toDateString(),
+                    optional($fund->unitPrices()->reorder()->orderBy('as_of_date')->first())->as_of_date?->toDateString() ?? 'none',
+                ),
+            ], 422);
+        }
+
+        $bookValue = (float) $row->price;
+        $premiumPct = (float) $fund->current_premium_pct;
+
+        $pricePerUnit = isset($data['unitPriceOverride'])
+            ? round((float) $data['unitPriceOverride'], 4)
+            : round($bookValue * (1 + ($premiumPct / 100)), 4);
+
+        $amount = isset($data['amount']) ? (float) $data['amount'] : null;
+
+        return response()->json([
+            'bookValue' => round($bookValue, 4),
+            'bookValueAsOf' => $row->as_of_date->toDateString(),
+            'quarterLabel' => $row->quarter_label,
+            'premiumPct' => $premiumPct,
+            'pricePerUnit' => $pricePerUnit,
+            'priceOverridden' => isset($data['unitPriceOverride']),
+            'amount' => $amount,
+            'units' => $amount !== null ? round($amount / $pricePerUnit, 6) : null,
+        ]);
+    }
+
 }
