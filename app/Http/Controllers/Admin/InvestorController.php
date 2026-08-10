@@ -175,17 +175,6 @@ class InvestorController extends Controller
         ]);
 
         if (! empty($data['investmentDate'])) {
-            // Guard against a second subscription for the same investor and fund.
-            // A double-write shows up as exactly twice the contribution, which
-            // then reads as a plausible number rather than an obvious error.
-            $already = \App\Models\FundTransaction::where('investor_id', $investor->id)
-                ->where('fund_id', $fund->id)
-                ->exists();
-
-            if ($already) {
-                abort(422, 'This investor already has a ledger entry for that fund. Record further investments from the investor detail page rather than re-creating them here.');
-            }
-
             $investor = app(InvestorProcessingService::class)->recordBackdatedSubscription(
                 $investor,
                 (float) $data['commitment'],

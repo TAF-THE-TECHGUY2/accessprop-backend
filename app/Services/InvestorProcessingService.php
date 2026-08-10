@@ -1517,8 +1517,8 @@ class InvestorProcessingService
             $priceOverride = $amount / $units;
         }
 
-        return DB::transaction(function () use ($investor, $amount, $onDate, $priceOverride, $source, $admin, $dateOaMipaSigned) {
-            $this->upsertHoldingFromFunding($investor, $amount, $source, $onDate, $priceOverride, $dateOaMipaSigned);
+        return DB::transaction(function () use ($investor, $amount, $onDate, $priceOverride, $source, $admin, $dateOaMipaSigned, $units) {
+            $this->upsertHoldingFromFunding($investor, $amount, $source, $onDate, $priceOverride, $dateOaMipaSigned, $units);
 
             $transaction = FundTransaction::where('investor_id', $investor->id)
                 ->orderByDesc('id')
@@ -1725,6 +1725,7 @@ class InvestorProcessingService
         Carbon|string|null $onDate = null,
         ?float $priceOverride = null,
         Carbon|string|null $dateOaMipaSigned = null,
+        ?float $unitsPurchased = null,
     ): void {
         if ($amount <= 0) {
             return;
@@ -1785,7 +1786,13 @@ class InvestorProcessingService
             default => $premiumPct,
         };
 
-        $units = round($amount / $pricePerUnit, 6);
+        // A supplied unit count is stored verbatim. Deriving it back from the
+        // price loses precision: 404,329.34 / 40,400 = 10.00815198 at 8dp, and
+        // dividing back gives 40,400.000001. The unit count comes from the fund's
+        // records and must survive the round trip unchanged.
+        $units = $unitsPurchased !== null
+            ? round($unitsPurchased, 6)
+            : round($amount / $pricePerUnit, 6);
 
         FundTransaction::create([
             'investor_id' => $investor->id,
