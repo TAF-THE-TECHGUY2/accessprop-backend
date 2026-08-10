@@ -188,19 +188,50 @@ class InvestorPortalInvestmentController extends Controller
             default => Carbon::parse('1900-01-01'),
         };
 
-        $units = (float) $holding->units;
+        // Units held at each price date, from the ledger — not the current total.
+        // Using today's unit count for every historical point back-dates units the
+        // investor did not own yet, inflating the whole early series. It happens
+        // to look right for a single subscription and breaks on the second.
+        $ledger = FundTransaction::query()
+            ->where('investor_id', $holding->investor_id)
+            ->where('fund_id', $holding->fund_id)
+            ->orderBy('transaction_date')
+            ->orderBy('id')
+            ->get(['transaction_date', 'units']);
+
+        // No position, no series — plotting prices against zero units is noise.
+        if ($ledger->isEmpty()) {
+            return response()->json(['range' => $range, 'points' => []]);
+        }
+
+        $entryDate = $ledger->first()->transaction_date;
+
         $points = $holding->fund->unitPrices
             ->where('as_of_date', '>=', $cutoff)
+            // Nothing before the investor entered. They held no units then, so a
+            // value for that date would be fabricated.
+            ->filter(fn ($p) => $p->as_of_date->gte($entryDate))
             ->sortBy('as_of_date')
             ->values()
-            ->map(fn ($p) => [
-                'date' => $p->as_of_date->toDateString(),
-                'quarter' => $p->quarter_label,
-                'price' => (float) $p->price,
-                'value' => round($units * (float) $p->price, 2),
-            ]);
+            ->map(function ($p) use ($ledger) {
+                $unitsHeld = (float) $ledger
+                    ->filter(fn ($t) => $t->transaction_date->lte($p->as_of_date))
+                    ->sum('units');
 
-        return response()->json(['range' => $range, 'points' => $points]);
+                return [
+                    'date' => $p->as_of_date->toDateString(),
+                    'quarter' => $p->quarter_label,
+                    'price' => (float) $p->price,
+                    'units' => round($unitsHeld, 6),
+                    'value' => round($unitsHeld * (float) $p->price, 2),
+                ];
+            });
+
+        return response()->json([
+            'range' => $range,
+            'entryDate' => $entryDate->toDateString(),
+            'points' => $points->values(),
+        ]);
     }
 
     public function priceHistory(Request $request, string $fundCode): JsonResponse
