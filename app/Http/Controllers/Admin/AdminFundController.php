@@ -414,39 +414,51 @@ class AdminFundController extends Controller
         $data = $request->validate([
             'date' => ['required', 'date'],
             'amount' => ['nullable', 'numeric', 'gt:0'],
+            'units' => ['nullable', 'numeric', 'gt:0'],
             'unitPriceOverride' => ['nullable', 'numeric', 'gt:0'],
         ]);
 
+        $amount = isset($data['amount']) ? (float) $data['amount'] : null;
         $row = $fund->bookValueAsOf($data['date']);
+        $bookValue = $row ? (float) $row->price : null;
+        $premiumPct = (float) $fund->current_premium_pct;
 
-        if (! $row) {
+        // Precedence mirrors the write path: a supplied unit count wins, then an
+        // explicit price, then the published book value plus premium.
+        $source = 'book value';
+        $pricePerUnit = null;
+        $units = isset($data['units']) ? (float) $data['units'] : null;
+
+        if ($units !== null && $amount !== null) {
+            $pricePerUnit = round($amount / $units, 8);
+            $source = 'derived from units';
+        } elseif (isset($data['unitPriceOverride'])) {
+            $pricePerUnit = round((float) $data['unitPriceOverride'], 8);
+            $source = 'manual price';
+        } elseif ($bookValue !== null && $bookValue > 0) {
+            $pricePerUnit = round($bookValue * (1 + ($premiumPct / 100)), 8);
+        }
+
+        if ($pricePerUnit === null) {
             return response()->json([
                 'message' => sprintf(
-                    'No unit price is published on or before %s. The earliest is %s.',
+                    'No unit price is published on or before %s (earliest is %s). Supply a unit count or a price.',
                     Carbon::parse($data['date'])->toDateString(),
                     optional($fund->unitPrices()->reorder()->orderBy('as_of_date')->first())->as_of_date?->toDateString() ?? 'none',
                 ),
             ], 422);
         }
 
-        $bookValue = (float) $row->price;
-        $premiumPct = (float) $fund->current_premium_pct;
-
-        $pricePerUnit = isset($data['unitPriceOverride'])
-            ? round((float) $data['unitPriceOverride'], 4)
-            : round($bookValue * (1 + ($premiumPct / 100)), 4);
-
-        $amount = isset($data['amount']) ? (float) $data['amount'] : null;
-
         return response()->json([
-            'bookValue' => round($bookValue, 4),
-            'bookValueAsOf' => $row->as_of_date->toDateString(),
-            'quarterLabel' => $row->quarter_label,
+            'bookValue' => $bookValue !== null ? round($bookValue, 8) : null,
+            'bookValueAsOf' => $row?->as_of_date->toDateString(),
+            'quarterLabel' => $row?->quarter_label,
             'premiumPct' => $premiumPct,
             'pricePerUnit' => $pricePerUnit,
-            'priceOverridden' => isset($data['unitPriceOverride']),
+            'priceSource' => $source,
+            'priceOverridden' => $source !== 'book value',
             'amount' => $amount,
-            'units' => $amount !== null ? round($amount / $pricePerUnit, 6) : null,
+            'units' => $units ?? ($amount !== null ? round($amount / $pricePerUnit, 6) : null),
         ]);
     }
 

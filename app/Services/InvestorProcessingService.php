@@ -1505,9 +1505,20 @@ class InvestorProcessingService
         ?float $priceOverride = null,
         ?string $source = 'admin-entry',
         $admin = null,
+        ?float $units = null,
+        Carbon|string|null $dateOaMipaSigned = null,
     ): Investor {
-        return DB::transaction(function () use ($investor, $amount, $onDate, $priceOverride, $source, $admin) {
-            $this->upsertHoldingFromFunding($investor, $amount, $source, $onDate, $priceOverride);
+        // Units purchased is the authoritative input where it is known — the unit
+        // count comes from the fund's records and the price is the quotient of
+        // contribution ÷ units, not a published book value. Deriving units from a
+        // price instead reverses the dependency and produces round prices with
+        // uneven unit counts, which is the opposite of how the fund records them.
+        if ($units !== null && $units > 0) {
+            $priceOverride = $amount / $units;
+        }
+
+        return DB::transaction(function () use ($investor, $amount, $onDate, $priceOverride, $source, $admin, $dateOaMipaSigned) {
+            $this->upsertHoldingFromFunding($investor, $amount, $source, $onDate, $priceOverride, $dateOaMipaSigned);
 
             $transaction = FundTransaction::where('investor_id', $investor->id)
                 ->orderByDesc('id')
@@ -1713,6 +1724,7 @@ class InvestorProcessingService
         ?string $source = null,
         Carbon|string|null $onDate = null,
         ?float $priceOverride = null,
+        Carbon|string|null $dateOaMipaSigned = null,
     ): void {
         if ($amount <= 0) {
             return;
@@ -1725,16 +1737,33 @@ class InvestorProcessingService
         // subscription at today's price would fabricate both the unit count and
         // every return figure derived from it.
         $date = Carbon::parse($onDate ?? now())->toDateString();
-        $bookValue = $this->requireBookValueAsOf($fund, $date);
 
-        // Both are snapshotted onto the transaction and never read back from the
-        // fund: book value is republished quarterly and the premium changes per
+        // A book value is only required when the price has to be derived from it.
+        // With an explicit price — from a supplied unit count, or an override —
+        // the entry basis is already known, and demanding a published quarter
+        // would reject legitimate deposits predating the price series.
+        $bookValueRow = $fund->bookValueAsOf($date);
+        $bookValue = $bookValueRow ? (float) $bookValueRow->price : null;
+
+        if ($priceOverride === null && ($bookValue === null || $bookValue <= 0)) {
+            throw new RuntimeException(sprintf(
+                'Fund %s has no published unit price on or before %s, and no unit count or price was supplied; refusing to mint units at an invented price.',
+                $fund->code,
+                $date
+            ));
+        }
+
+        // Snapshotted onto the transaction and never read back from the fund:
+        // book value is republished quarterly and the premium changes per
         // issuance, so a later read would silently rewrite this entry price.
         $premiumPct = (float) $fund->current_premium_pct;
 
+        // 8dp, not 4. A derived price is contribution ÷ units and rarely round:
+        // 404,329.34 ÷ 40,400 = 10.008152. Rounding to 4dp loses nearly $2 on
+        // that row when multiplied back out, and the reconciliation fails.
         $pricePerUnit = $priceOverride !== null
-            ? round($priceOverride, 4)
-            : round($bookValue * (1 + ($premiumPct / 100)), 4);
+            ? round($priceOverride, 8)
+            : round($bookValue * (1 + ($premiumPct / 100)), 8);
 
         if ($pricePerUnit <= 0) {
             throw new RuntimeException(sprintf(
@@ -1748,9 +1777,13 @@ class InvestorProcessingService
 
         // An explicit override means the premium recorded on the row has to be
         // derived from it, not copied from the fund, or the two would disagree.
-        $recordedPremium = $priceOverride !== null
-            ? round((($pricePerUnit - $bookValue) / $bookValue) * 100, 3)
-            : $premiumPct;
+        // With no published book value there is nothing to charge a premium
+        // over, so both stay null rather than implying a comparison.
+        $recordedPremium = match (true) {
+            $bookValue === null || $bookValue <= 0 => null,
+            $priceOverride !== null => round((($pricePerUnit - $bookValue) / $bookValue) * 100, 3),
+            default => $premiumPct,
+        };
 
         $units = round($amount / $pricePerUnit, 6);
 
@@ -1758,6 +1791,12 @@ class InvestorProcessingService
             'investor_id' => $investor->id,
             'fund_id' => $fund->id,
             'transaction_date' => $date,
+            // Distinct from the deposit date and nullable — unrecorded
+            // throughout the manager's own sample. Deposit date drives every
+            // holding-period calculation.
+            'date_oa_mipa_signed' => $dateOaMipaSigned
+                ? Carbon::parse($dateOaMipaSigned)->toDateString()
+                : null,
             'type' => FundTransaction::TYPE_SUBSCRIPTION,
             'units' => $units,
             'book_value_at_purchase' => $bookValue,

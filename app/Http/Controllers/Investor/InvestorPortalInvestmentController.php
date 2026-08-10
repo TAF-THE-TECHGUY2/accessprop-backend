@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Fund;
 use App\Models\FundHolding;
 use App\Models\FundTransaction;
+use App\Models\FundUnitPrice;
+use App\Services\InvestmentCalculator;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -26,7 +28,7 @@ class InvestorPortalInvestmentController extends Controller
 
         foreach ($holdings as $holding) {
             $latestPrice = $holding->fund->unitPrices->sortByDesc('as_of_date')->first();
-            $price = (float) ($latestPrice->price ?? $holding->average_unit_price);
+            $price = (float) ($latestPrice->price ?? 0);
             $value = (float) $holding->units * $price;
 
             $totalInvested += (float) $holding->amount_invested;
@@ -61,12 +63,12 @@ class InvestorPortalInvestmentController extends Controller
 
         $totalCurrentValue = 0;
         foreach ($holdings as $h) {
-            $price = (float) ($h->fund->unitPrices->sortByDesc('as_of_date')->first()->price ?? $h->average_unit_price);
+            $price = (float) ($this->latestUnitValue($h->fund)->price ?? 0);
             $totalCurrentValue += (float) $h->units * $price;
         }
 
         $result = $holdings->map(function (FundHolding $holding) use ($totalCurrentValue) {
-            $currentPrice = (float) ($holding->fund->unitPrices->sortByDesc('as_of_date')->first()->price ?? $holding->average_unit_price);
+            $currentPrice = (float) ($this->latestUnitValue($holding->fund)->price ?? 0);
             $currentValue = (float) $holding->units * $currentPrice;
             $invested = (float) $holding->amount_invested;
             $distributions = $holding->totalDistributions();
@@ -118,6 +120,68 @@ class InvestorPortalInvestmentController extends Controller
         });
 
         return response()->json(['data' => $result]);
+    }
+
+
+
+    /**
+     * Per-investment breakdown and totals, to the fund manager's workbook
+     * formulas. This is the authoritative calculation surface — the older
+     * portfolio() and holdings() figures remain for the existing UI.
+     *
+     * Everything is measured to the unit value's as-of date, never to now(), so
+     * the figures reconcile against his sheet instead of drifting daily.
+     */
+    public function breakdown(Request $request, ?string $fundCode = null): JsonResponse
+    {
+        $investor = $request->user();
+
+        $fund = $fundCode
+            ? Fund::where('code', $fundCode)->firstOrFail()
+            : Fund::find($investor->fund_id) ?? Fund::first();
+
+        if (! $fund) {
+            return response()->json(['message' => 'No fund resolved for this investor.'], 422);
+        }
+
+        $unitValue = $fund->currentUnitPrice();
+
+        if (! $unitValue) {
+            return response()->json([
+                'message' => sprintf('Fund %s has no published unit value, so the position cannot be valued.', $fund->code),
+            ], 422);
+        }
+
+        $transactions = FundTransaction::query()
+            ->where('investor_id', $investor->id)
+            ->where('fund_id', $fund->id)
+            ->orderBy('transaction_date')
+            ->orderBy('id')
+            ->get();
+
+        $calculator = new InvestmentCalculator(
+            (float) $unitValue->price,
+            $unitValue->as_of_date,
+        );
+
+        return response()->json([
+            'fund' => ['code' => $fund->code, 'name' => $fund->name],
+        ] + $calculator->compute($transactions));
+    }
+
+    /**
+     * Latest published unit value for a fund, with the date it applies to.
+     *
+     * There is deliberately no fallback to average_unit_price. That fallback was
+     * the root of a reported bug: average_unit_price is contribution ÷ units, so
+     * units × average_unit_price returns the amount invested exactly. The portal
+     * then showed current value identical to invested, with gain and return at
+     * zero — cost basis silently presented as market value. A fund with no
+     * published price has no valuation, and saying so is the only honest answer.
+     */
+    private function latestUnitValue(Fund $fund): ?FundUnitPrice
+    {
+        return $fund->unitPrices->sortByDesc('as_of_date')->first();
     }
 
     /**

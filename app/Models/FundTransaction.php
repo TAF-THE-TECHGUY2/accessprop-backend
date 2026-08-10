@@ -17,10 +17,11 @@ class FundTransaction extends Model
 
     protected $casts = [
         'transaction_date' => 'date',
+        'date_oa_mipa_signed' => 'date',
         'units' => 'decimal:6',
-        'book_value_at_purchase' => 'decimal:4',
+        'book_value_at_purchase' => 'decimal:8',
         'premium_pct' => 'decimal:3',
-        'price_per_unit' => 'decimal:4',
+        'price_per_unit' => 'decimal:8',
         'gross_amount' => 'decimal:2',
     ];
 

@@ -102,9 +102,16 @@ class InvestorController extends Controller
             // book value published on that date. Omit it to create the profile
             // without a position — funding then happens through the normal flow.
             'investmentDate' => ['nullable', 'date', 'before_or_equal:today'],
+            // Units purchased is the authoritative input where known — the fund's
+            // records hold a unit count and the price is the quotient. Supply
+            // either units or a price; units wins if both are given.
+            'units' => ['nullable', 'numeric', 'gt:0'],
             // Escape hatch for entries the published series cannot express.
-            // Defaults to the derived price when omitted.
+            // Ignored when units is supplied.
             'unitPriceOverride' => ['nullable', 'numeric', 'gt:0'],
+            // Distinct from the deposit date. Nullable — unrecorded throughout
+            // the manager's sample. The deposit date drives all calculations.
+            'dateOaMipaSigned' => ['nullable', 'date'],
         ]);
 
         if ($data['investorType'] !== 'Individual' && empty($data['entityName'])) {
@@ -168,6 +175,17 @@ class InvestorController extends Controller
         ]);
 
         if (! empty($data['investmentDate'])) {
+            // Guard against a second subscription for the same investor and fund.
+            // A double-write shows up as exactly twice the contribution, which
+            // then reads as a plausible number rather than an obvious error.
+            $already = \App\Models\FundTransaction::where('investor_id', $investor->id)
+                ->where('fund_id', $fund->id)
+                ->exists();
+
+            if ($already) {
+                abort(422, 'This investor already has a ledger entry for that fund. Record further investments from the investor detail page rather than re-creating them here.');
+            }
+
             $investor = app(InvestorProcessingService::class)->recordBackdatedSubscription(
                 $investor,
                 (float) $data['commitment'],
@@ -175,6 +193,8 @@ class InvestorController extends Controller
                 isset($data['unitPriceOverride']) ? (float) $data['unitPriceOverride'] : null,
                 'admin-create',
                 $request->user(),
+                isset($data['units']) ? (float) $data['units'] : null,
+                $data['dateOaMipaSigned'] ?? null,
             );
         }
 

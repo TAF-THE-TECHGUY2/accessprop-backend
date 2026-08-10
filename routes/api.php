@@ -61,6 +61,8 @@ Route::prefix('investor')->group(function () {
 
         Route::get('/portal/portfolio', [InvestorPortalInvestmentController::class, 'portfolio']);
         Route::get('/portal/holdings', [InvestorPortalInvestmentController::class, 'holdings']);
+        Route::get('/portal/breakdown', [InvestorPortalInvestmentController::class, 'breakdown']);
+        Route::get('/portal/breakdown/{fundCode}', [InvestorPortalInvestmentController::class, 'breakdown']);
         Route::get('/portal/holdings/{fundCode}/performance', [InvestorPortalInvestmentController::class, 'performance']);
         Route::get('/portal/holdings/{fundCode}/price-history', [InvestorPortalInvestmentController::class, 'priceHistory']);
         Route::get('/portal/holdings/{fundCode}/distributions', [InvestorPortalInvestmentController::class, 'distributions']);
