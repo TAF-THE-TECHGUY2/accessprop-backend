@@ -1166,7 +1166,9 @@ class InvestorProcessingService
             // fully funded with no ledger entry, no holding, and an empty
             // portfolio in the portal. upsertHoldingFromFunding also derives
             // investment_funded, so the figure and the position cannot diverge.
-            $this->upsertHoldingFromFunding(
+            // Shortfall only. Confirming receipt asserts a total has arrived; if
+            // the ledger already records it, there is nothing further to mint.
+            $this->mintFundingShortfall(
                 $investor,
                 (float) ($payment->amount ?: $investor->investment_commitment),
                 'confirm-funds-received'
@@ -1576,22 +1578,30 @@ class InvestorProcessingService
                 'notes' => 'Manual override: '.$reason,
             ]);
 
-            // investment_funded is derived from the ledger inside
-            // upsertHoldingFromFunding, so repeated overrides accumulate.
             $this->updateInvestor($investor, [
                 'investment_status' => 'funds_confirmed',
                 'investment_wallet_status' => 'Funds received (manual override)',
                 'dashboard_status' => 'active',
             ]);
 
-            $this->upsertHoldingFromFunding($investor, $amount);
+            // Only the part the ledger does not already hold. An investor created
+            // with a position who is then pushed through this override must not
+            // have their contribution counted twice.
+            $minted = $this->mintFundingShortfall($investor, $amount, 'funding-override');
 
             $this->logActivity(
                 $investor,
                 'funding_override',
                 'Funds manually confirmed (override)',
-                sprintf('Admin bypassed Stripe and marked $%s funded. Reason: %s', number_format($amount, 2), $reason),
-                ['integrationRequestId' => $request->id, 'amount' => $amount, 'adminId' => $admin?->id]
+                sprintf(
+                    'Admin bypassed Stripe and marked $%s funded%s. Reason: %s',
+                    number_format($amount, 2),
+                    $minted > 0
+                        ? sprintf(' (minted $%s not already in the ledger)', number_format($minted, 2))
+                        : ' (already fully recorded in the ledger; no units minted)',
+                    $reason
+                ),
+                ['integrationRequestId' => $request->id, 'amount' => $amount, 'minted' => $minted, 'adminId' => $admin?->id]
             );
 
             return $this->freshInvestor($investor);
@@ -1625,9 +1635,9 @@ class InvestorProcessingService
                 'dashboard_status' => 'active',
                 'investment_wallet_status' => 'Funds received (manual override)',
             ];
-            // investment_funded is derived from the ledger by
-            // upsertHoldingFromFunding below when $resolvedAmount > 0.
             $this->updateInvestor($investor, $updates);
+
+            $minted = 0.0;
 
             if ($resolvedAmount > 0) {
                 PaymentConfirmation::create([
@@ -1638,7 +1648,8 @@ class InvestorProcessingService
                     'notes' => 'Manual override (fully activate): '.$reason,
                 ]);
 
-                $this->upsertHoldingFromFunding($investor, $resolvedAmount);
+                // Shortfall only — see mintFundingShortfall().
+                $minted = $this->mintFundingShortfall($investor, $resolvedAmount, 'fully-activate-override');
             }
 
             $this->logActivity(
@@ -1646,7 +1657,7 @@ class InvestorProcessingService
                 'fully_activate_override',
                 'Investor fully activated (override)',
                 'Admin set KYC, accreditation, documents, funding and active status in one action. Reason: '.$reason,
-                ['integrationRequestId' => $request->id, 'amount' => $resolvedAmount, 'adminId' => $admin?->id]
+                ['integrationRequestId' => $request->id, 'amount' => $resolvedAmount, 'minted' => $minted, 'adminId' => $admin?->id]
             );
 
             return $this->freshInvestor($investor);
@@ -1718,6 +1729,51 @@ class InvestorProcessingService
      *
      * @throws RuntimeException when the fund or its unit price cannot be resolved
      */
+    /**
+     * Mint only the part of an asserted funded total that the ledger does not
+     * already record.
+     *
+     * Status overrides exist to advance an investor past a stuck integration,
+     * not to record a new investment. Calling the funding path unconditionally
+     * made them do both: an investor created with a $121,000 position who was
+     * then pushed through the funding override ended up with two ledger rows and
+     * $242,000 invested — the reported double count.
+     *
+     * Returns the amount actually minted, so callers can report it.
+     *
+     * Genuine new money never routes through here. Additional subscriptions,
+     * settled Stripe payments and demo payments all mint in full, because in
+     * those cases the money is not yet in the ledger.
+     */
+    private function mintFundingShortfall(Investor $investor, float $assertedTotal, ?string $source = null): float
+    {
+        if ($assertedTotal <= 0) {
+            return 0.0;
+        }
+
+        $alreadyRecorded = (float) FundTransaction::query()
+            ->where('investor_id', $investor->id)
+            ->whereIn('type', FundTransaction::INFLOW_TYPES)
+            ->sum('gross_amount');
+
+        // Sub-cent differences are rounding, not a shortfall worth a ledger row.
+        $shortfall = round($assertedTotal - $alreadyRecorded, 2);
+
+        if ($shortfall < 0.01) {
+            Log::info('Funding override matched the existing ledger; no units minted.', [
+                'investor' => $investor->code,
+                'asserted' => $assertedTotal,
+                'alreadyRecorded' => $alreadyRecorded,
+            ]);
+
+            return 0.0;
+        }
+
+        $this->upsertHoldingFromFunding($investor, $shortfall, $source);
+
+        return $shortfall;
+    }
+
     private function upsertHoldingFromFunding(
         Investor $investor,
         float $amount,
