@@ -43,6 +43,9 @@ class InvestorResource extends JsonResource
             ],
             'investmentInfo' => [
                 'fundName' => $this->investment_fund_name,
+                // fund_id is authoritative; the code is what API paths key on.
+                'fundId' => $this->fund_id,
+                'fundCode' => optional(\App\Models\Fund::find($this->fund_id))->code,
                 'commitment' => (float) $this->investment_commitment,
                 'funded' => (float) $this->investment_funded,
                 'walletStatus' => $this->investment_wallet_status,

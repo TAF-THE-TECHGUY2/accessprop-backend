@@ -95,6 +95,7 @@ Route::prefix('admin')->group(function () {
         Route::post('/investors', [InvestorController::class, 'store']);
         Route::get('/investors/{code}', [InvestorController::class, 'show']);
         Route::patch('/investors/{code}/statuses', [InvestorController::class, 'updateStatuses']);
+        Route::post('/investors/{code}/investments', [InvestorController::class, 'storeInvestment']);
         Route::delete('/investors/{code}', [InvestorController::class, 'destroy']);
         Route::get('/investors/{code}/investready', [InvestorIntegrationController::class, 'showInvestReady']);
         Route::post('/investors/{code}/investready/resync', [InvestorIntegrationController::class, 'resyncInvestReady']);

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Admin\InvestorResource;
+use App\Models\FundTransaction;
 use App\Models\Investor;
 use App\Services\InvestorProcessingService;
 use Illuminate\Http\JsonResponse;
@@ -306,4 +307,74 @@ class InvestorController extends Controller
 
         return new InvestorResource($investor);
     }
+
+    /**
+     * Record an investment against an existing investor.
+     *
+     * The create-investor form can only record the first one, so multiple
+     * investments at different prices — the fund's normal case — had no admin
+     * path at all and were only reachable from a console.
+     *
+     * Units purchased is the authoritative input where the fund's records hold
+     * one; the price is then contribution / units. Supply either and the other is
+     * derived.
+     */
+    public function storeInvestment(Request $request, string $code): InvestorResource
+    {
+        $investor = Investor::where('code', $code)->firstOrFail();
+
+        $data = $request->validate([
+            'amount' => ['required', 'numeric', 'gt:0'],
+            'investmentDate' => ['required', 'date', 'before_or_equal:today'],
+            'units' => ['nullable', 'numeric', 'gt:0'],
+            'unitPrice' => ['nullable', 'numeric', 'gt:0'],
+            'dateOaMipaSigned' => ['nullable', 'date'],
+            // Set only after the operator has seen the duplicate warning and
+            // confirmed the entry is genuine.
+            'allowDuplicate' => ['nullable', 'boolean'],
+        ]);
+
+        if (empty($investor->fund_id)) {
+            abort(422, 'This investor has no fund assigned, so an investment cannot be recorded against one.');
+        }
+
+        // An identical contribution on the same date is nearly always a repeated
+        // submit. Two genuinely identical same-day investments are possible, so
+        // this is a confirmation rather than a prohibition.
+        if (empty($data['allowDuplicate'])) {
+            $duplicate = FundTransaction::where('investor_id', $investor->id)
+                ->where('fund_id', $investor->fund_id)
+                ->whereDate('transaction_date', $data['investmentDate'])
+                ->where('gross_amount', round((float) $data['amount'], 2))
+                ->exists();
+
+            if ($duplicate) {
+                abort(409, sprintf(
+                    'An investment of $%s dated %s already exists for this investor. Re-submit with allowDuplicate to record it anyway.',
+                    number_format((float) $data['amount'], 2),
+                    $data['investmentDate'],
+                ));
+            }
+        }
+
+        $investor = app(InvestorProcessingService::class)->recordBackdatedSubscription(
+            $investor,
+            (float) $data['amount'],
+            $data['investmentDate'],
+            isset($data['unitPrice']) ? (float) $data['unitPrice'] : null,
+            'admin-record-investment',
+            $request->user(),
+            isset($data['units']) ? (float) $data['units'] : null,
+            $data['dateOaMipaSigned'] ?? null,
+        );
+
+        $investor->load([
+            'documents', 'activities', 'messages', 'notes',
+            'integrationRequests', 'fundingInstructions',
+            'paymentConfirmations', 'partnerMatches', 'activityLogs',
+        ]);
+
+        return new InvestorResource($investor);
+    }
+
 }
