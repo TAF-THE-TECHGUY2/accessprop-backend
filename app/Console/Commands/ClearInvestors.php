@@ -122,8 +122,13 @@ class ClearInvestors extends Command
             return self::SUCCESS;
         }
 
+        // The prompt is a second gate for someone typing --force by hand. With no
+        // terminal to answer it, confirm() returns the default and the command
+        // exits successfully having deleted nothing — so a scripted cleanup would
+        // report success and leave the rows behind. --force is explicit enough on
+        // its own.
         $this->newLine();
-        if (! $this->confirm('This cannot be undone. Delete them?', false)) {
+        if ($this->input->isInteractive() && ! $this->confirm('This cannot be undone. Delete them?', false)) {
             $this->info('Aborted. Nothing deleted.');
 
             return self::SUCCESS;
