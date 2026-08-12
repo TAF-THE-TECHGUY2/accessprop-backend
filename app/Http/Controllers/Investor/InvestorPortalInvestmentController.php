@@ -218,17 +218,33 @@ class InvestorPortalInvestmentController extends Controller
         $units = (float) $inflows->sum('units');
         $paid = (float) $inflows->sum('gross_amount');
 
-        // Value of those units at the book value ruling when each was bought.
-        $bookCost = (float) $inflows->reduce(
+        // A premium is only meaningful against a published book value, and any
+        // inflow may legitimately have none — a deposit predating the fund's
+        // first published quarter, or one where units were supplied directly.
+        //
+        // Casting a null book value to 0.0 and summing anyway is what produced a
+        // reported defect: with one of three inflows unpriced, the weighted book
+        // value came out at $7.90 against a real entry price of $10.01, and the
+        // portal claimed a 26.8% premium of $121,470.16 that nobody paid. If any
+        // inflow is unpriced the comparison is not available, and saying so is
+        // the only honest answer.
+        $unpriced = $inflows->contains(
+            fn (FundTransaction $t) => $t->book_value_at_purchase === null
+                || (float) $t->book_value_at_purchase <= 0
+        );
+
+        $bookCost = $unpriced ? null : (float) $inflows->reduce(
             fn ($carry, FundTransaction $t) => $carry + ((float) $t->units * (float) $t->book_value_at_purchase),
             0.0
         );
 
         return [
             'entryPrice' => $units > 0 ? round($paid / $units, 4) : null,
-            'entryBookValue' => $units > 0 ? round($bookCost / $units, 4) : null,
-            'premiumPct' => $bookCost > 0 ? round((($paid - $bookCost) / $bookCost) * 100, 3) : 0.0,
-            'premiumPaid' => round($paid - $bookCost, 2),
+            'entryBookValue' => $bookCost !== null && $units > 0 ? round($bookCost / $units, 4) : null,
+            'premiumPct' => $bookCost !== null && $bookCost > 0
+                ? round((($paid - $bookCost) / $bookCost) * 100, 3)
+                : null,
+            'premiumPaid' => $bookCost !== null ? round($paid - $bookCost, 2) : null,
             'firstTransactionDate' => $inflows->first()->transaction_date->toDateString(),
             'transactionCount' => $inflows->count(),
         ];
