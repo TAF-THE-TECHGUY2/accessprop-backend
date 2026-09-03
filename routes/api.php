@@ -22,6 +22,7 @@ use App\Http\Controllers\Investor\InvestorPersonaController;
 use App\Http\Controllers\Investor\InvestorPortalCommunicationsController;
 use App\Http\Controllers\Investor\InvestorPortalDocumentsController;
 use App\Http\Controllers\Investor\InvestorPortalInvestmentController;
+use App\Http\Controllers\Investor\InvestorPortalPasswordController;
 use App\Http\Controllers\Investor\InvestorPortalProfileController;
 use App\Http\Controllers\Investor\InvestReadyController;
 use App\Http\Controllers\Public\InvestorRegistrationController;
@@ -57,6 +58,7 @@ Route::prefix('investor')->group(function () {
         Route::get('/funding/status', [InvestorFundingController::class, 'status']);
 
         Route::get('/portal/profile', [InvestorPortalProfileController::class, 'show']);
+        Route::post('/portal/password', [InvestorPortalPasswordController::class, 'update'])->middleware('throttle:10,1');
         Route::patch('/portal/profile', [InvestorPortalProfileController::class, 'update']);
 
         Route::get('/portal/portfolio', [InvestorPortalInvestmentController::class, 'portfolio']);

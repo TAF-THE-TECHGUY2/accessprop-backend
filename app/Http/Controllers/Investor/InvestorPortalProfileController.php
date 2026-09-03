@@ -78,6 +78,15 @@ class InvestorPortalProfileController extends Controller
                 'zipPostalCode' => $investor->address_postal_code,
                 'country' => $investor->address_country,
             ],
+            // Two of the three states on the Profile header. The third —
+            // documents — has no signing column anywhere in portal_documents, so
+            // the frontend derives it by counting what the documents endpoint
+            // actually returns rather than this asserting a completeness the
+            // schema cannot support.
+            'status' => [
+                'accreditation' => $investor->accreditation_status,
+                'kyc' => $investor->kyc_status,
+            ],
             'readonly' => [
                 'code' => $investor->code,
                 'email' => $investor->email,
