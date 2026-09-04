@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\AdminCommunicationController;
+use App\Http\Controllers\Admin\AdminMessageThreadController;
 use App\Http\Controllers\Admin\AdminFundController;
 use App\Http\Controllers\Admin\AdminPortalDocumentController;
 use App\Http\Controllers\Admin\AgreementController;
@@ -22,6 +23,7 @@ use App\Http\Controllers\Investor\InvestorPersonaController;
 use App\Http\Controllers\Investor\InvestorPortalCommunicationsController;
 use App\Http\Controllers\Investor\InvestorPortalDocumentsController;
 use App\Http\Controllers\Investor\InvestorPortalInvestmentController;
+use App\Http\Controllers\Investor\InvestorPortalMessageController;
 use App\Http\Controllers\Investor\InvestorPortalPasswordController;
 use App\Http\Controllers\Investor\InvestorPortalProfileController;
 use App\Http\Controllers\Investor\InvestReadyController;
@@ -73,6 +75,13 @@ Route::prefix('investor')->group(function () {
         Route::get('/portal/documents', [InvestorPortalDocumentsController::class, 'index']);
         Route::get('/portal/documents/{id}/download', [InvestorPortalDocumentsController::class, 'download']);
 
+        // Secure messaging. Sends are throttled: an investor can open a thread
+        // themselves, which is a write anyone with a login can trigger.
+        Route::get('/portal/threads', [InvestorPortalMessageController::class, 'index']);
+        Route::post('/portal/threads', [InvestorPortalMessageController::class, 'store'])->middleware('throttle:20,60');
+        Route::get('/portal/threads/{id}', [InvestorPortalMessageController::class, 'show']);
+        Route::post('/portal/threads/{id}/messages', [InvestorPortalMessageController::class, 'storeMessage'])->middleware('throttle:60,60');
+
         Route::get('/portal/communications', [InvestorPortalCommunicationsController::class, 'index']);
         Route::get('/portal/communications/{id}', [InvestorPortalCommunicationsController::class, 'show']);
     });
@@ -122,6 +131,12 @@ Route::prefix('admin')->group(function () {
 
         // Communications (Phase 4 admin)
         Route::get('/communications', [AdminCommunicationController::class, 'index']);
+
+            Route::get('/threads', [AdminMessageThreadController::class, 'index']);
+            Route::get('/threads/{id}', [AdminMessageThreadController::class, 'show']);
+            Route::post('/threads/{id}/messages', [AdminMessageThreadController::class, 'storeMessage']);
+            Route::post('/threads/{id}/resolve', [AdminMessageThreadController::class, 'resolve']);
+            Route::post('/threads/{id}/reopen', [AdminMessageThreadController::class, 'reopen']);
         Route::post('/communications', [AdminCommunicationController::class, 'store']);
         Route::patch('/communications/{id}', [AdminCommunicationController::class, 'update']);
         Route::delete('/communications/{id}', [AdminCommunicationController::class, 'destroy']);

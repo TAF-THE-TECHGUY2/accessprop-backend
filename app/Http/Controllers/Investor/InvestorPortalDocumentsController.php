@@ -28,15 +28,7 @@ class InvestorPortalDocumentsController extends Controller
         $fundIds = $this->accessibleFundIds($investor);
 
         $documents = PortalDocument::query()
-            ->where(function ($q) use ($investor, $fundIds) {
-                $q->where('scope', 'global')
-                    ->orWhere(function ($q2) use ($fundIds) {
-                        $q2->where('scope', 'fund')->whereIn('fund_id', $fundIds);
-                    })
-                    ->orWhere(function ($q3) use ($investor) {
-                        $q3->where('scope', 'investor')->where('investor_id', $investor->id);
-                    });
-            })
+            ->visibleTo($investor, $fundIds)
             ->orderBy('category')
             ->orderByDesc('document_dated_at')
             ->get();
@@ -114,7 +106,7 @@ class InvestorPortalDocumentsController extends Controller
      *      leaving investors unresolvable. It stays only for rows predating
      *      fund_id and should be removed once those are backfilled.
      */
-    private function accessibleFundIds(Investor $investor): Collection
+    public function accessibleFundIds(Investor $investor): Collection
     {
         $fundIds = collect();
 

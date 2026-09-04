@@ -35,6 +35,11 @@ class Investor extends Authenticatable
         return $this->hasMany(InvestorDocument::class, 'investor_profile_id');
     }
 
+    public function threads(): HasMany
+    {
+        return $this->hasMany(MessageThread::class)->orderByDesc('last_message_at');
+    }
+
     public function holdings(): HasMany
     {
         return $this->hasMany(FundHolding::class);
