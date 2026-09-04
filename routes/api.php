@@ -63,7 +63,6 @@ Route::prefix('investor')->group(function () {
         Route::post('/portal/password', [InvestorPortalPasswordController::class, 'update'])->middleware('throttle:10,1');
         Route::patch('/portal/profile', [InvestorPortalProfileController::class, 'update']);
 
-        Route::get('/portal/portfolio', [InvestorPortalInvestmentController::class, 'portfolio']);
         Route::get('/portal/holdings', [InvestorPortalInvestmentController::class, 'holdings']);
         Route::get('/portal/breakdown', [InvestorPortalInvestmentController::class, 'breakdown']);
         Route::get('/portal/breakdown/{fundCode}', [InvestorPortalInvestmentController::class, 'breakdown']);

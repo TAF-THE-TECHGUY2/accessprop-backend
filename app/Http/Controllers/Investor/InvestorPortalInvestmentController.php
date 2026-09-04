@@ -14,45 +14,6 @@ use Illuminate\Support\Carbon;
 
 class InvestorPortalInvestmentController extends Controller
 {
-    public function portfolio(Request $request): JsonResponse
-    {
-        $investor = $request->user();
-
-        $holdings = $investor->holdings()
-            ->with(['fund.unitPrices'])
-            ->get();
-
-        $totalInvested = 0;
-        $totalCurrentValue = 0;
-        $totalDistributions = 0;
-
-        foreach ($holdings as $holding) {
-            $latestPrice = $holding->fund->unitPrices->sortByDesc('as_of_date')->first();
-            $price = (float) ($latestPrice->price ?? 0);
-            $value = (float) $holding->units * $price;
-
-            $totalInvested += (float) $holding->amount_invested;
-            $totalCurrentValue += $value;
-            $totalDistributions += $holding->totalDistributions();
-        }
-
-        $totalGainLoss = $totalCurrentValue - $totalInvested;
-        $totalGainLossPct = $totalInvested > 0 ? ($totalGainLoss / $totalInvested) * 100 : 0;
-        $totalReturnPct = $totalInvested > 0
-            ? (($totalCurrentValue + $totalDistributions - $totalInvested) / $totalInvested) * 100
-            : 0;
-
-        return response()->json([
-            'totalInvested' => round($totalInvested, 2),
-            'totalCurrentValue' => round($totalCurrentValue, 2),
-            'totalDistributions' => round($totalDistributions, 2),
-            'totalGainLoss' => round($totalGainLoss, 2),
-            'totalGainLossPct' => round($totalGainLossPct, 2),
-            'totalReturnPct' => round($totalReturnPct, 2),
-            'holdingsCount' => $holdings->count(),
-        ]);
-    }
-
     public function holdings(Request $request): JsonResponse
     {
         $investor = $request->user();
@@ -74,20 +35,6 @@ class InvestorPortalInvestmentController extends Controller
             $distributions = $holding->totalDistributions();
             $gainLoss = $currentValue - $invested;
             $gainLossPct = $invested > 0 ? ($gainLoss / $invested) * 100 : 0;
-            $totalReturnPct = $invested > 0
-                ? (($currentValue + $distributions - $invested) / $invested) * 100
-                : 0;
-
-            $years = $holding->first_invested_at
-                ? max(0.01, $holding->first_invested_at->floatDiffInYears(now()))
-                : 1;
-            $annualisedFactor = $invested > 0
-                ? ($currentValue + $distributions) / $invested
-                : 1;
-            $annualizedReturnPct = $annualisedFactor > 0
-                ? (pow($annualisedFactor, 1 / $years) - 1) * 100
-                : 0;
-
             $entry = $this->entrySummary($holding);
 
             return [
@@ -114,8 +61,6 @@ class InvestorPortalInvestmentController extends Controller
                 'totalDistributions' => round($distributions, 2),
                 'gainLoss' => round($gainLoss, 2),
                 'gainLossPct' => round($gainLossPct, 2),
-                'totalReturnPct' => round($totalReturnPct, 2),
-                'annualizedReturnPct' => round($annualizedReturnPct, 2),
                 'aumFees' => round($holding->totalAumFees(), 2),
                 'performanceFees' => round($holding->totalPerformanceFees(), 2),
                 'firstInvestedAt' => optional($holding->first_invested_at)->toIso8601String(),
@@ -130,7 +75,7 @@ class InvestorPortalInvestmentController extends Controller
     /**
      * Per-investment breakdown and totals, to the fund manager's workbook
      * formulas. This is the authoritative calculation surface — the older
-     * portfolio() and holdings() figures remain for the existing UI.
+     * holdings() supplies fund identity and position facts only.
      *
      * Everything is measured to the unit value's as-of date, never to now(), so
      * the figures reconcile against his sheet instead of drifting daily.

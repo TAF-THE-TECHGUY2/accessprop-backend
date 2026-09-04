@@ -309,21 +309,23 @@ class InvestmentCalculatorTest extends TestCase
     }
 
     #[Test]
-    public function a_reinvestment_currently_counts_towards_contributed_capital(): void
+    public function a_voluntarily_reinvested_distribution_counts_as_contributed_capital(): void
     {
-        // Pinning present behaviour, not endorsing it. reinvestment is in
-        // INFLOW_TYPES, so a reinvested distribution is summed into
-        // contribution — which treats the fund's own payout as capital the
-        // investor put in, and so understates their return.
+        // Confirmed by the fund manager: distributions are always paid in cash
+        // and reported separately from unit value — never automatically
+        // reinvested. If an investor then chooses to put some of it back, that
+        // is a new and separate investment at the unit price ruling at the
+        // time, which is exactly a subscription. So reinvestment belonging to
+        // INFLOW_TYPES and counting toward contributed capital is correct: the
+        // money did leave the fund and come back.
         //
-        // A $124,200 distribution reinvested at $13.25 takes the denominator
-        // from $575,470 to $699,670 and the reported gain from +32.39% to
-        // +26.64%, on an investor who contributed no new money.
+        // The consequence is that contributed capital legitimately exceeds the
+        // investor's outside money, and the gain percentage is measured against
+        // the larger figure — +26.64% here rather than +32.39%.
         //
-        // Whether that is right depends on whether distributions are paid in
-        // cash or reinvested — an open question with the fund manager. This
-        // test exists so that when it is answered, the consequence is visible
-        // rather than discovered later in a portal figure.
+        // What must never happen is counting the same distribution twice, once
+        // as cash received and again inside the units it bought. That is why
+        // nothing adds totalDistributions on top of a unit-derived value.
         $withReinvestment = $this->sample()->push(
             $this->transaction('2026-04-30', 124200.0, 9373.584906, FundTransaction::TYPE_REINVESTMENT),
         );
@@ -335,6 +337,13 @@ class InvestmentCalculatorTest extends TestCase
         $this->assertSame(66873.584906, $totals['units']);
         $this->assertSame(26.64, $totals['gainPct']);
         $this->assertSame(4, $totals['investmentCount']);
+
+        // The double count this guards against: adding the $124,200 back on top
+        // of a value that already contains the units it bought reports +44.39%.
+        $doubleCounted = ($totals['unitsValue'] + 124200.0 - $totals['contribution'])
+            / $totals['contribution'] * 100;
+        $this->assertSame(44.39, round($doubleCounted, 2));
+        $this->assertNotSame(round($doubleCounted, 2), $totals['gainPct']);
     }
 
     private function calculator(): InvestmentCalculator
