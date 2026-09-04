@@ -309,6 +309,47 @@ class InvestmentCalculatorTest extends TestCase
     }
 
     #[Test]
+    public function a_deposit_postdating_the_valuation_is_flagged_as_unvalued(): void
+    {
+        // A production position: $10,000 deposited 2026-08-09, priced at the
+        // 2026-06-30 book value. The units did not exist on the valuation date,
+        // so the holding period is negative and the gain is arithmetically
+        // zero. Reporting that as +0.00% over -0.1095 years is an invented
+        // figure dressed as a result.
+        $rows = (new InvestmentCalculator(13.25, Carbon::parse('2026-06-30')))
+            ->compute($this->transactions([['2026-08-09', 10000.0, 754.716981]]))['rows'];
+
+        $this->assertSame(-0.1095, $rows[0]['holdingYears']);
+        $this->assertTrue($rows[0]['valuedAtDeposit']);
+        $this->assertSame(0.0, $rows[0]['annualizedReturnPct']);
+    }
+
+    #[Test]
+    public function an_ordinary_deposit_is_not_flagged(): void
+    {
+        foreach ($this->calculator()->compute($this->sample())['rows'] as $row) {
+            $this->assertFalse($row['valuedAtDeposit'], $row['depositDate']);
+        }
+
+        $this->assertFalse(
+            $this->calculator()->compute($this->sample())['totals']['hasUnvaluedDeposits'],
+        );
+    }
+
+    #[Test]
+    public function the_totals_say_when_any_deposit_postdates_the_valuation(): void
+    {
+        $mixed = $this->sample()->push(
+            $this->transaction('2026-08-09', 10000.0, 754.716981, id: 99),
+        );
+
+        $totals = (new InvestmentCalculator(13.25, Carbon::parse('2026-06-30')))
+            ->compute($mixed)['totals'];
+
+        $this->assertTrue($totals['hasUnvaluedDeposits']);
+    }
+
+    #[Test]
     public function a_voluntarily_reinvested_distribution_counts_as_contributed_capital(): void
     {
         // Confirmed by the fund manager: distributions are always paid in cash

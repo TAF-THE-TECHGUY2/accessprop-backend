@@ -83,6 +83,13 @@ class InvestmentCalculator
                 'gainPct' => round($gainPct * 100, 2),
                 'holdingYears' => round($holdingYears, 4),
                 'annualizedReturnPct' => round($this->annualized($gainPct, $holdingYears) * 100, 2),
+                // A deposit dated after the latest published price cannot be
+                // valued: the position did not exist on the valuation date, so
+                // its holding period is negative and its gain is arithmetically
+                // zero. Reporting +0.00% presents that as a real result — the
+                // same class of defect as showing cost basis as market value —
+                // so the row says it is unvalued and the UI shows it as such.
+                'valuedAtDeposit' => $holdingYears <= 0,
             ];
         })->values();
 
@@ -125,6 +132,9 @@ class InvestmentCalculator
                 'weightedAverageHoldingPeriodYears' => round($wahp, 4),
                 'annualizedReturnPct' => round($this->annualized($totalGainPct, $wahp) * 100, 2),
                 'investmentCount' => $inflows->count(),
+                // True when any deposit postdates the valuation, so the totals
+                // are measured to a date part of the position did not exist on.
+                'hasUnvaluedDeposits' => $rows->contains('valuedAtDeposit', true),
             ],
         ];
     }
@@ -168,6 +178,7 @@ class InvestmentCalculator
             'weightedAverageHoldingPeriodYears' => 0.0,
             'annualizedReturnPct' => 0.0,
             'investmentCount' => 0,
+            'hasUnvaluedDeposits' => false,
         ];
     }
 }
