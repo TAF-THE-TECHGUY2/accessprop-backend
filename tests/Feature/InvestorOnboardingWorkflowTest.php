@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Mail\InvestorWelcomeMail;
+use App\Models\Fund;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
@@ -14,6 +15,15 @@ class InvestorOnboardingWorkflowTest extends TestCase
     public function test_new_three_page_onboarding_payload_creates_a_pending_investor_session(): void
     {
         Mail::fake();
+
+        // Registration resolves the single fund open for investment, so without
+        // one the endpoint correctly refuses. RefreshDatabase gives an empty
+        // funds table, so the fixture has to supply it.
+        Fund::create([
+            'code' => 'AREF-I',
+            'name' => 'Access Real Estate Fund I',
+            'status' => 'active',
+        ]);
 
         $response = $this->postJson('/api/investors/register', [
             'firstName' => 'Ada',

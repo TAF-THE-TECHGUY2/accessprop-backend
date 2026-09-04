@@ -83,11 +83,17 @@ return new class extends Migration
         // Resolve the existing name string to a real fund, once. Left null where
         // no exact match exists — the write path throws on null rather than
         // guessing, which surfaces the problem instead of burying it.
-        DB::statement("
-            UPDATE investors i
-            JOIN funds f ON f.name = i.investment_fund_name
-            SET i.fund_id = f.id
-        ");
+        // Expressed through the query builder rather than as UPDATE ... JOIN,
+        // which is MySQL-only syntax. SQLite rejects it, which meant the feature
+        // suite could not migrate at all and every test in it errored.
+        DB::table('investors')
+            ->whereNotNull('investment_fund_name')
+            ->update([
+                'fund_id' => DB::table('funds')
+                    ->select('id')
+                    ->whereColumn('funds.name', 'investors.investment_fund_name')
+                    ->limit(1),
+            ]);
 
         Schema::table('investors', function (Blueprint $table) {
             $table->foreign('fund_id')->references('id')->on('funds')->nullOnDelete();
@@ -102,11 +108,16 @@ return new class extends Migration
             $table->unsignedBigInteger('investor_id')->nullable()->after('fund_id');
         });
 
-        DB::statement("
-            UPDATE distributions d
-            JOIN fund_holdings h ON h.id = d.fund_holding_id
-            SET d.fund_id = h.fund_id, d.investor_id = h.investor_id
-        ");
+        DB::table('distributions')->update([
+            'fund_id' => DB::table('fund_holdings')
+                ->select('fund_id')
+                ->whereColumn('fund_holdings.id', 'distributions.fund_holding_id')
+                ->limit(1),
+            'investor_id' => DB::table('fund_holdings')
+                ->select('investor_id')
+                ->whereColumn('fund_holdings.id', 'distributions.fund_holding_id')
+                ->limit(1),
+        ]);
 
         // fund_holding_id was NOT NULL with an FK, so every row necessarily
         // joined — there can be no unresolved rows here.
@@ -134,11 +145,16 @@ return new class extends Migration
             $table->unsignedBigInteger('investor_id')->nullable()->after('fund_id');
         });
 
-        DB::statement("
-            UPDATE fund_fees ff
-            JOIN fund_holdings h ON h.id = ff.fund_holding_id
-            SET ff.fund_id = h.fund_id, ff.investor_id = h.investor_id
-        ");
+        DB::table('fund_fees')->update([
+            'fund_id' => DB::table('fund_holdings')
+                ->select('fund_id')
+                ->whereColumn('fund_holdings.id', 'fund_fees.fund_holding_id')
+                ->limit(1),
+            'investor_id' => DB::table('fund_holdings')
+                ->select('investor_id')
+                ->whereColumn('fund_holdings.id', 'fund_fees.fund_holding_id')
+                ->limit(1),
+        ]);
 
         // Same ordering rule as distributions above.
         Schema::table('fund_fees', function (Blueprint $table) {
@@ -161,11 +177,13 @@ return new class extends Migration
         Schema::table('fund_fees', function (Blueprint $table) {
             $table->unsignedBigInteger('fund_holding_id')->nullable()->after('id');
         });
-        DB::statement("
-            UPDATE fund_fees ff
-            JOIN fund_holdings h ON h.fund_id = ff.fund_id AND h.investor_id = ff.investor_id
-            SET ff.fund_holding_id = h.id
-        ");
+        DB::table('fund_fees')->update([
+            'fund_holding_id' => DB::table('fund_holdings')
+                ->select('id')
+                ->whereColumn('fund_holdings.fund_id', 'fund_fees.fund_id')
+                ->whereColumn('fund_holdings.investor_id', 'fund_fees.investor_id')
+                ->limit(1),
+        ]);
         // Rows whose holding no longer exists cannot be reparented back.
         DB::statement('DELETE FROM fund_fees WHERE fund_holding_id IS NULL');
         Schema::table('fund_fees', function (Blueprint $table) {
@@ -181,11 +199,13 @@ return new class extends Migration
         Schema::table('distributions', function (Blueprint $table) {
             $table->unsignedBigInteger('fund_holding_id')->nullable()->after('id');
         });
-        DB::statement("
-            UPDATE distributions d
-            JOIN fund_holdings h ON h.fund_id = d.fund_id AND h.investor_id = d.investor_id
-            SET d.fund_holding_id = h.id
-        ");
+        DB::table('distributions')->update([
+            'fund_holding_id' => DB::table('fund_holdings')
+                ->select('id')
+                ->whereColumn('fund_holdings.fund_id', 'distributions.fund_id')
+                ->whereColumn('fund_holdings.investor_id', 'distributions.investor_id')
+                ->limit(1),
+        ]);
         DB::statement('DELETE FROM distributions WHERE fund_holding_id IS NULL');
         Schema::table('distributions', function (Blueprint $table) {
             $table->dropForeign(['fund_id']);
