@@ -6,9 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Models\Distribution;
 use App\Models\Fund;
 use App\Models\FundFee;
+use App\Models\FundFeeDeclaration;
 use App\Models\FundHolding;
+use App\Models\FundTransaction;
 use App\Models\FundUnitPrice;
 use App\Models\PortalDocument;
+use App\Services\FeeAllocator;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -314,69 +317,133 @@ class AdminFundController extends Controller
 
     // ----- Fees (auto-allocated across all holdings) -----
 
+    /**
+     * Records the accountant's quarterly fee and allocates it.
+     *
+     * The website does not calculate this fee. The accountant computes it from
+     * the fund's gross asset value after quarter end, and that figure is
+     * entered here as a total. All this does is divide it pro rata by ownership
+     * for the quarter, so the sum of what investors see always equals the
+     * number in the books.
+     *
+     * Re-declaring the same fund, type and period replaces the previous
+     * allocations rather than adding to them — a hand-entered figure gets
+     * corrected, and a correction must not double-charge the quarter.
+     */
     public function declareFee(Request $request, string $code): JsonResponse
     {
         $fund = Fund::where('code', $code)->firstOrFail();
 
         $data = $request->validate([
             'feeType' => ['required', 'string', 'in:aum,performance'],
-            'rate' => ['nullable', 'numeric', 'min:0', 'max:1'], // fraction (0.0150 = 1.5%)
-            'amount' => ['nullable', 'numeric', 'min:0'],         // flat $ per holding
+            'totalAmount' => ['required', 'numeric', 'min:0'],
+            'grossAssetValue' => ['nullable', 'numeric', 'min:0'],
             'periodStart' => ['required', 'date'],
             'periodEnd' => ['required', 'date', 'after_or_equal:periodStart'],
             'description' => ['nullable', 'string', 'max:255'],
         ]);
 
-        if (empty($data['rate']) && empty($data['amount'])) {
+        $start = Carbon::parse($data['periodStart'])->startOfDay();
+        $end = Carbon::parse($data['periodEnd'])->startOfDay();
+
+        $allocator = new FeeAllocator();
+
+        $transactions = FundTransaction::query()
+            ->where('fund_id', $fund->id)
+            ->whereDate('transaction_date', '<=', $end)
+            ->orderBy('transaction_date')
+            ->get();
+
+        $weights = $allocator->timeWeightedUnits($transactions, $start, $end);
+
+        if ($weights === []) {
             return response()->json([
-                'message' => 'Either rate or amount must be provided.',
+                'message' => sprintf(
+                    'Nobody held %s between %s and %s, so there is nothing to allocate this fee to.',
+                    $fund->code,
+                    $start->toDateString(),
+                    $end->toDateString(),
+                ),
             ], 422);
         }
 
-        $result = DB::transaction(function () use ($fund, $data) {
-            $holdings = FundHolding::where('fund_id', $fund->id)->get();
-            $created = 0;
-            $totalAmount = 0;
+        $amounts = $allocator->allocate((float) $data['totalAmount'], $weights);
+        $percentages = $allocator->ownershipPercentages($weights);
 
-            foreach ($holdings as $h) {
-                $amount = isset($data['rate'])
-                    ? round((float) $h->amount_invested * (float) $data['rate'], 2)
-                    : (float) $data['amount'];
+        $declaration = DB::transaction(function () use ($fund, $data, $start, $end, $amounts, $percentages, $request) {
+            // Matched on the date part rather than through updateOrCreate: the
+            // date cast writes a time component, so an equality match on
+            // toDateString() misses the existing row and the insert then
+            // collides with the unique key.
+            $attributes = [
+                'total_amount' => $data['totalAmount'],
+                'gross_asset_value' => $data['grossAssetValue'] ?? null,
+                'basis' => 'time_weighted_units',
+                'notes' => $data['description'] ?? null,
+                'declared_by' => $request->user()?->id,
+            ];
 
-                if ($amount <= 0) {
-                    continue;
-                }
+            $declaration = FundFeeDeclaration::query()
+                ->where('fund_id', $fund->id)
+                ->where('fee_type', $data['feeType'])
+                ->whereDate('period_start', $start)
+                ->whereDate('period_end', $end)
+                ->first();
 
-                FundFee::create([
+            if ($declaration) {
+                $declaration->update($attributes);
+            } else {
+                $declaration = FundFeeDeclaration::create($attributes + [
                     'fund_id' => $fund->id,
-                    'investor_id' => $h->investor_id,
                     'fee_type' => $data['feeType'],
-                    'amount' => $amount,
-                    'period_start' => $data['periodStart'],
-                    'period_end' => $data['periodEnd'],
-                    'description' => $data['description'] ?? sprintf(
-                        '%s fee (%s)',
-                        ucfirst($data['feeType']),
-                        isset($data['rate']) ? number_format($data['rate'] * 100, 2).'%' : '$'.number_format($amount, 2),
-                    ),
+                    'period_start' => $start->toDateString(),
+                    'period_end' => $end->toDateString(),
                 ]);
-
-                $created++;
-                $totalAmount += $amount;
             }
 
-            return ['count' => $created, 'total' => $totalAmount];
+            // Replace, never append: this is a correction path as much as a
+            // creation path.
+            $declaration->allocations()->delete();
+
+            foreach ($amounts as $investorId => $amount) {
+                FundFee::create([
+                    'fee_declaration_id' => $declaration->id,
+                    'fund_id' => $fund->id,
+                    'investor_id' => $investorId,
+                    'fee_type' => $data['feeType'],
+                    'amount' => $amount,
+                    'ownership_pct' => $percentages[$investorId] ?? null,
+                    'period_start' => $start->toDateString(),
+                    'period_end' => $end->toDateString(),
+                    'description' => $data['description'] ?? sprintf(
+                        '%s fee for %s – %s, allocated by ownership',
+                        ucfirst($data['feeType']),
+                        $start->toDateString(),
+                        $end->toDateString(),
+                    ),
+                ]);
+            }
+
+            return $declaration;
         });
+
+        $reconciles = $declaration->allocationsReconcile();
 
         return response()->json([
             'message' => sprintf(
-                'Created %d fee entries totaling $%s.',
-                $result['count'],
-                number_format($result['total'], 2),
+                'Allocated $%s across %d investor(s) for %s – %s.',
+                number_format((float) $data['totalAmount'], 2),
+                count($amounts),
+                $start->toDateString(),
+                $end->toDateString(),
             ),
-            'count' => $result['count'],
-            'totalAmount' => round($result['total'], 2),
-        ], 201);
+            'declarationId' => $declaration->id,
+            'totalAmount' => round((float) $data['totalAmount'], 2),
+            'allocatedTotal' => round(array_sum($amounts), 2),
+            'reconciles' => $reconciles,
+            'count' => count($amounts),
+            'basis' => 'time_weighted_units',
+        ], $reconciles ? 201 : 500);
     }
 
     public function destroyFee(int $id): JsonResponse

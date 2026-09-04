@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Investor;
 
 use App\Http\Controllers\Controller;
 use App\Models\Fund;
+use App\Models\FundFee;
 use App\Models\FundHolding;
 use App\Models\FundTransaction;
 use App\Models\FundUnitPrice;
@@ -300,6 +301,18 @@ class InvestorPortalInvestmentController extends Controller
         ]);
     }
 
+    /**
+     * The investor's allocated share of the fund's fees.
+     *
+     * Informational only, and the payload says so. The quarterly unit price the
+     * fund publishes is already net of all fund expenses and fees, so returns
+     * computed from it are net too — deducting these figures again would charge
+     * the investor twice for the same fees.
+     *
+     * Each allocation is reported alongside the fund-level total it came from
+     * and the ownership share used to split it, so the figure can be checked
+     * rather than taken on trust.
+     */
     public function fees(Request $request, string $fundCode): JsonResponse
     {
         $investor = $request->user();
@@ -307,34 +320,37 @@ class InvestorPortalInvestmentController extends Controller
             ->whereHas('fund', fn ($q) => $q->where('code', $fundCode))
             ->firstOrFail();
 
-        $fees = $holding->fees()->get();
+        $fees = $holding->fees()->with('declaration')->get();
 
-        // Disclosure requires three figures, not one: the rate, what was charged
-        // for the most recent period, and the cumulative total to date.
-        $aumFees = $fees->where('fee_type', 'aum')->sortByDesc('period_end');
-        $latestAum = $aumFees->first();
+        $shape = fn (FundFee $f) => [
+            'amount' => (float) $f->amount,
+            'periodStart' => $f->period_start->toDateString(),
+            'periodEnd' => $f->period_end->toDateString(),
+            'description' => $f->description,
+            'ownershipPct' => $f->ownership_pct !== null ? (float) $f->ownership_pct : null,
+            // The fund-level figure this is a share of, where the allocation
+            // came from a declaration. Null on rows predating that model.
+            'fundTotal' => $f->declaration ? (float) $f->declaration->total_amount : null,
+            'fundGrossAssetValue' => $f->declaration && $f->declaration->gross_asset_value !== null
+                ? (float) $f->declaration->gross_asset_value
+                : null,
+        ];
+
+        $aum = $fees->where('fee_type', 'aum')->sortByDesc('period_end');
+        $latestAum = $aum->first();
 
         return response()->json([
+            // Context only. The amounts come from the accountant's declared
+            // totals, never from multiplying this rate by anything.
             'aumRatePct' => (float) $holding->fund->aum_fee_annual_pct,
-            'aumCurrentPeriod' => $latestAum ? [
-                'amount' => (float) $latestAum->amount,
-                'periodStart' => $latestAum->period_start->toDateString(),
-                'periodEnd' => $latestAum->period_end->toDateString(),
-            ] : null,
-            'aum' => $fees->where('fee_type', 'aum')->map(fn ($f) => [
-                'amount' => (float) $f->amount,
-                'periodStart' => $f->period_start->toDateString(),
-                'periodEnd' => $f->period_end->toDateString(),
-                'description' => $f->description,
-            ])->values(),
-            'performance' => $fees->where('fee_type', 'performance')->map(fn ($f) => [
-                'amount' => (float) $f->amount,
-                'periodStart' => $f->period_start->toDateString(),
-                'periodEnd' => $f->period_end->toDateString(),
-                'description' => $f->description,
-            ])->values(),
-            'totalAum' => round($fees->where('fee_type', 'aum')->sum('amount'), 2),
-            'totalPerformance' => round($fees->where('fee_type', 'performance')->sum('amount'), 2),
+            'aumCurrentPeriod' => $latestAum ? $shape($latestAum) : null,
+            'aum' => $aum->sortBy('period_end')->map($shape)->values(),
+            'performance' => $fees->where('fee_type', 'performance')
+                ->sortBy('period_end')->map($shape)->values(),
+            'totalAum' => round((float) $fees->where('fee_type', 'aum')->sum('amount'), 2),
+            'totalPerformance' => round((float) $fees->where('fee_type', 'performance')->sum('amount'), 2),
+            // Read by the UI so the disclosure cannot drift from the policy.
+            'alreadyNetOfFees' => true,
         ]);
     }
 }

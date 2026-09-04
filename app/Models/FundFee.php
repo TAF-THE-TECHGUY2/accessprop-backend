@@ -11,6 +11,7 @@ class FundFee extends Model
 
     protected $casts = [
         'amount' => 'decimal:2',
+        'ownership_pct' => 'decimal:6',
         'period_start' => 'date',
         'period_end' => 'date',
     ];
@@ -27,5 +28,14 @@ class FundFee extends Model
     public function investor(): BelongsTo
     {
         return $this->belongsTo(Investor::class);
+    }
+
+    /**
+     * The declared quarterly total this allocation is a share of. Null on rows
+     * predating the declaration model.
+     */
+    public function declaration(): BelongsTo
+    {
+        return $this->belongsTo(FundFeeDeclaration::class, 'fee_declaration_id');
     }
 }
