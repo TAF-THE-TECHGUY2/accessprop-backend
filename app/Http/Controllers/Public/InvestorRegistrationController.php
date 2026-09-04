@@ -65,6 +65,10 @@ class InvestorRegistrationController extends Controller
                 'phone' => $data['mobilePhone'] ?? null,
                 'country' => $data['country'],
                 'joined_at' => now(),
+                // Onboarding has always asked this and the answer was being
+                // dropped on the floor. Absent means the investor did not
+                // answer, which is not the same as declining.
+                'newsletter_opted_in' => $data['receiveUpdates'] ?? true,
                 'investment_amount' => $data['investmentAmount'],
                 'accreditation_status' => $accreditation,
                 'kyc_status' => 'pending',

@@ -12,7 +12,7 @@ use Illuminate\Http\Request;
  * read-only payload so the frontend can render which fields show a pencil
  * icon.
  *
- * Editable: name, phone, address fields, communication preferences.
+ * Editable: name, phone, address fields, newsletter preference.
  * Read-only (admin-changes only): email, investorType, accreditationStatus,
  * taxIdLast4, residency.
  */
@@ -36,6 +36,7 @@ class InvestorPortalProfileController extends Controller
             'stateProvince' => ['sometimes', 'string', 'max:100'],
             'zipPostalCode' => ['sometimes', 'string', 'max:20'],
             'country' => ['sometimes', 'string', 'max:100'],
+            'newsletterOptedIn' => ['sometimes', 'boolean'],
         ]);
 
         $columnMap = [
@@ -47,6 +48,7 @@ class InvestorPortalProfileController extends Controller
             'stateProvince' => 'address_state',
             'zipPostalCode' => 'address_postal_code',
             'country' => 'address_country',
+            'newsletterOptedIn' => 'newsletter_opted_in',
         ];
 
         $updates = [];
@@ -77,6 +79,7 @@ class InvestorPortalProfileController extends Controller
                 'stateProvince' => $investor->address_state,
                 'zipPostalCode' => $investor->address_postal_code,
                 'country' => $investor->address_country,
+                'newsletterOptedIn' => (bool) $investor->newsletter_opted_in,
             ],
             // Two of the three states on the Profile header. The third —
             // documents — has no signing column anywhere in portal_documents, so
