@@ -4,6 +4,7 @@ namespace App\Mail;
 
 use App\Models\MessageThread;
 use App\Models\ThreadMessage;
+use App\Support\MailSender;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
 use Illuminate\Queue\SerializesModels;
@@ -30,7 +31,7 @@ class SecureMessageReceivedMail extends Mailable
     {
         $investor = $this->thread->investor;
 
-        return $this
+        $mail = $this
             ->subject(sprintf(
                 '[%s] %s — %s',
                 $this->categoryLabel(),
@@ -43,6 +44,16 @@ class SecureMessageReceivedMail extends Mailable
                 'message' => $this->message,
                 'investor' => $investor,
             ]);
+
+        // Reply-To stays the investor -- hitting reply should answer them, not
+        // the platform mailbox -- but From follows the admin setting like every
+        // other email. Left unset if nothing resolves, so Laravel's global
+        // default still applies.
+        if ($from = MailSender::from()) {
+            $mail->from($from);
+        }
+
+        return $mail;
     }
 
     private function categoryLabel(): string

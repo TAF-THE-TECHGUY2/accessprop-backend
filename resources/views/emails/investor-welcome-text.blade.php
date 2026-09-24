@@ -1,50 +1,51 @@
 ACCESS PROPERTIES
 Reference: {{ strtoupper($investorCode) }}
 
-WELCOME LETTER
-==============
+WELCOME TO ACCESS PROPERTIES
+============================
 
-From the Desk of Dionysios Kaskarelis, Founder and Chief Executive Manager
+From the Desk of Dionysios Kaskarelis, Founder and Chief Executive Officer
 
 Dear {{ $firstName }},
 
-Welcome to Access Properties — we're truly thrilled to have you on board.
-I want to personally thank you for placing your trust in us and to welcome
-you as a new Member.
+Welcome to Access Properties, and thank you for creating your investor
+account.
 
-At Access Properties, Members are not just investors — they are long-term
-partners. Your participation makes you part of a growing community that
-shares a belief that real estate investing should be accessible,
-transparent, and built for the long term.
+I founded Access Properties with a simple objective: to make professionally
+managed private real estate investing more accessible, transparent, and
+straightforward through a modern investor experience.
 
-Access Properties was created to broaden access to professionally managed
-real estate investing through a fund-based model. Rather than investing
-deal-by-deal, Members invest into diversified real estate investment funds
-where capital is pooled, and each Member owns a proportional interest based
-on their investment amount. This structure is designed to support scale,
-diversification, and a more institutional approach to real estate
-investing — while still keeping the experience approachable and
-Member-first.
+Your account gives you access to the accredited investor pathway for Access
+Real Estate Fund I, our Greater Boston residential real estate investment
+vehicle. Through the investor portal, you can review the offering documents
+and complete each step of the investment process securely online.
 
-Your participation supports our current offering, Access Properties Real
-Estate Diversified Income Fund I, and contributes to building a diversified
-portfolio designed for long-term performance and stability.
+The process includes reviewing the offering materials, verifying your
+identity and accredited investor status, completing the applicable
+subscription documents, and submitting investment funding. Creating an
+account does not commit you to invest, and any investment remains subject
+to completion of the applicable qualification, subscription, acceptance,
+and funding process.
 
-At Access Properties, we place a strong emphasis on transparency and
-communication — your Investor Dashboard is where this comes to life,
-giving you direct access to performance updates, reporting, and key
-documents.
+Access Real Estate Fund I is advised by Access Investment Management, Inc.,
+a Massachusetts-registered investment adviser. The fund pursues income and
+long-term value through residential real estate investment, supported by
+active investment oversight and property-level execution.
 
-Thank you again for joining us and for your confidence in our mission.
-We're excited to build the future of Access Properties together — and
-we're honored to have you with us as a Member.
+Transparency and communication are central to the Access experience. As you
+proceed, your investor portal will provide access to offering documents,
+account information, communications, and, once an investment has been
+accepted, ongoing reporting and investment information.
+
+Thank you again for your interest in Access Properties. I look forward to
+having you explore the offering and learn more about what we are building.
 
 Best regards,
 
 Dionysios Kaskarelis
-Founder and Chief Executive Manager
+Founder & CEO | Access Properties LLC
 
 ---
-This email was sent to {{ $investor->email }} because you completed
-onboarding with Access Properties. If you did not register, please reply
-to this email so we can investigate.
+This email was sent to {{ $investor->email }} because an investor account
+was created with Access Properties. If you did not create this account,
+please reply to this email so we can investigate.

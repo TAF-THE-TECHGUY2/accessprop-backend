@@ -7,6 +7,8 @@ use App\Mail\InvestorPasswordResetMail;
 use App\Mail\InvestorWelcomeMail;
 use App\Models\EmailTemplate;
 use App\Models\Investor;
+use App\Models\Setting;
+use App\Rules\VerifiedSendingDomain;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Mail;
@@ -41,6 +43,10 @@ class EmailTemplateController extends Controller
             'bodyHtml' => ['required', 'string'],
             'bodyText' => ['nullable', 'string'],
             'isActive' => ['nullable', 'boolean'],
+            // Blank means inherit the platform default from Settings.
+            'fromName' => ['nullable', 'string', 'max:255'],
+            'fromAddress' => ['nullable', 'email', 'max:255', new VerifiedSendingDomain],
+            'replyToAddress' => ['nullable', 'email', 'max:255'],
         ]);
 
         $this->guardAgainstForbiddenSyntax($data);
@@ -50,6 +56,9 @@ class EmailTemplateController extends Controller
             'body_html' => $data['bodyHtml'],
             'body_text' => $data['bodyText'] ?? null,
             'is_active' => (bool) ($data['isActive'] ?? $template->is_active),
+            'from_name' => $this->blankToNull($data['fromName'] ?? null),
+            'from_address' => $this->blankToNull($data['fromAddress'] ?? null),
+            'reply_to_address' => $this->blankToNull($data['replyToAddress'] ?? null),
             'updated_by' => $request->user()->id ?? null,
         ]);
 
@@ -226,6 +235,25 @@ class EmailTemplateController extends Controller
         return is_file($path) ? file_get_contents($path) : '';
     }
 
+    /** An empty box in the editor means "inherit", not "send with no name". */
+    private function blankToNull(?string $value): ?string
+    {
+        return $value !== null && trim($value) !== '' ? trim($value) : null;
+    }
+
+    /** The platform default a blank override falls back to. */
+    private function inheritedSender(): array
+    {
+        $setting = Setting::current();
+
+        return [
+            'fromName' => $setting?->mail_from_name ?: config('mail.from.name'),
+            'fromAddress' => $setting?->mail_from_address ?: config('mail.from.address'),
+            'replyToAddress' => $setting?->mail_reply_to_address,
+            'sendingDomain' => VerifiedSendingDomain::sendingDomain(),
+        ];
+    }
+
     private function shape(EmailTemplate $t, bool $withBody): array
     {
         $base = [
@@ -236,6 +264,12 @@ class EmailTemplateController extends Controller
             'variables' => $t->variables ?? [],
             'isActive' => (bool) $t->is_active,
             'updatedAt' => optional($t->updated_at)->toIso8601String(),
+            'fromName' => $t->from_name,
+            'fromAddress' => $t->from_address,
+            'replyToAddress' => $t->reply_to_address,
+            // What this template resolves to when its overrides are blank, so
+            // the editor can show the inherited value as placeholder text.
+            'inherited' => $this->inheritedSender(),
         ];
 
         if ($withBody) {

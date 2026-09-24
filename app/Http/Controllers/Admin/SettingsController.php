@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Setting;
+use App\Rules\VerifiedSendingDomain;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -20,6 +21,11 @@ class SettingsController extends Controller
         'defaultCountry' => 'default_country',
         'allowParallelOnboarding' => 'allow_parallel_onboarding',
         'demoPaymentsEnabled' => 'demo_payments_enabled',
+        'termsOfUseUrl' => 'terms_of_use_url',
+        'privacyPolicyUrl' => 'privacy_policy_url',
+        'mailFromName' => 'mail_from_name',
+        'mailFromAddress' => 'mail_from_address',
+        'mailReplyToAddress' => 'mail_reply_to_address',
     ];
 
     public function show(): JsonResponse
@@ -40,6 +46,15 @@ class SettingsController extends Controller
             'defaultCountry' => ['sometimes', 'string', 'max:255'],
             'allowParallelOnboarding' => ['sometimes', 'boolean'],
             'demoPaymentsEnabled' => ['sometimes', 'boolean'],
+            // Public-facing links: a typo here is visible to every investor
+            // on the create-account page, so reject anything that isn't a URL.
+            'termsOfUseUrl' => ['sometimes', 'url', 'max:2048'],
+            'privacyPolicyUrl' => ['sometimes', 'url', 'max:2048'],
+            // The name every investor sees in their inbox.
+            'mailFromName' => ['sometimes', 'string', 'max:255'],
+            'mailFromAddress' => ['sometimes', 'email', 'max:255', new VerifiedSendingDomain],
+            // Not authenticated, so it may live on any domain.
+            'mailReplyToAddress' => ['sometimes', 'nullable', 'email', 'max:255'],
         ]);
 
         $setting = Setting::singleton();
@@ -69,6 +84,13 @@ class SettingsController extends Controller
             'defaultCountry' => $setting->default_country,
             'allowParallelOnboarding' => $setting->allow_parallel_onboarding,
             'demoPaymentsEnabled' => $setting->demo_payments_enabled,
+            'termsOfUseUrl' => $setting->terms_of_use_url,
+            'privacyPolicyUrl' => $setting->privacy_policy_url,
+            'mailFromName' => $setting->mail_from_name,
+            'mailFromAddress' => $setting->mail_from_address,
+            'mailReplyToAddress' => $setting->mail_reply_to_address,
+            // Read-only: lets the admin UI say which domain is allowed.
+            'mailSendingDomain' => VerifiedSendingDomain::sendingDomain(),
         ];
     }
 }

@@ -28,7 +28,7 @@ class EmailTemplateSeeder extends Seeder
             [
                 'key' => 'investor_welcome',
                 'name' => 'Investor welcome',
-                'description' => 'Sent automatically when an investor completes onboarding and their account is created.',
+                'description' => 'Sent automatically when an investor creates their account.',
                 'subject' => 'Welcome to Access Properties',
                 'body_html' => $this->view('investor-welcome'),
                 'body_text' => $this->view('investor-welcome-text'),

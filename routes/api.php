@@ -1,8 +1,8 @@
 <?php
 
 use App\Http\Controllers\Admin\AdminCommunicationController;
-use App\Http\Controllers\Admin\AdminMessageThreadController;
 use App\Http\Controllers\Admin\AdminFundController;
+use App\Http\Controllers\Admin\AdminMessageThreadController;
 use App\Http\Controllers\Admin\AdminPortalDocumentController;
 use App\Http\Controllers\Admin\AgreementController;
 use App\Http\Controllers\Admin\AuthController;
@@ -16,6 +16,7 @@ use App\Http\Controllers\Admin\InvestorProcessingController;
 use App\Http\Controllers\Admin\KycController;
 use App\Http\Controllers\Admin\ReportsController;
 use App\Http\Controllers\Admin\SettingsController;
+use App\Http\Controllers\Investor\InvestReadyController;
 use App\Http\Controllers\Investor\InvestorAuthController;
 use App\Http\Controllers\Investor\InvestorFundingController;
 use App\Http\Controllers\Investor\InvestorPasswordResetController;
@@ -26,8 +27,9 @@ use App\Http\Controllers\Investor\InvestorPortalInvestmentController;
 use App\Http\Controllers\Investor\InvestorPortalMessageController;
 use App\Http\Controllers\Investor\InvestorPortalPasswordController;
 use App\Http\Controllers\Investor\InvestorPortalProfileController;
-use App\Http\Controllers\Investor\InvestReadyController;
+use App\Http\Controllers\Investor\InvestorPortalPropertiesController;
 use App\Http\Controllers\Public\InvestorRegistrationController;
+use App\Http\Controllers\Public\LegalLinksController;
 use App\Http\Controllers\Webhooks\DocuSignWebhookController;
 use App\Http\Controllers\Webhooks\InvestReadyWebhookController;
 use App\Http\Controllers\Webhooks\PersonaWebhookController;
@@ -37,6 +39,9 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('investors')->middleware('throttle:10,1')->group(function () {
     Route::post('/register', [InvestorRegistrationController::class, 'store']);
 });
+
+// Read by the create-account page before the visitor has an account.
+Route::get('/legal-links', LegalLinksController::class)->middleware('throttle:60,1');
 
 Route::post('/webhooks/persona', PersonaWebhookController::class);
 Route::post('/webhooks/docusign', DocuSignWebhookController::class);
@@ -51,6 +56,8 @@ Route::prefix('investor')->group(function () {
     Route::middleware('auth:sanctum')->group(function () {
         Route::post('/logout', [InvestorAuthController::class, 'logout']);
         Route::get('/me', [InvestorAuthController::class, 'me']);
+        Route::post('/session/refresh', [InvestorAuthController::class, 'refreshSession'])
+            ->middleware('throttle:30,60');
         Route::post('/persona/start', [InvestorPersonaController::class, 'start']);
         Route::post('/persona/complete', [InvestorPersonaController::class, 'complete']);
         Route::post('/investready/start', [InvestReadyController::class, 'start']);
@@ -70,6 +77,9 @@ Route::prefix('investor')->group(function () {
         Route::get('/portal/holdings/{fundCode}/price-history', [InvestorPortalInvestmentController::class, 'priceHistory']);
         Route::get('/portal/holdings/{fundCode}/distributions', [InvestorPortalInvestmentController::class, 'distributions']);
         Route::get('/portal/holdings/{fundCode}/fees', [InvestorPortalInvestmentController::class, 'fees']);
+
+        // The fund's real estate, proxied from the site that manages it.
+        Route::get('/portal/holdings/{fundCode}/properties', [InvestorPortalPropertiesController::class, 'index']);
 
         Route::get('/portal/documents', [InvestorPortalDocumentsController::class, 'index']);
         Route::get('/portal/documents/{id}/download', [InvestorPortalDocumentsController::class, 'download']);

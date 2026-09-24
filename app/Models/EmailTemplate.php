@@ -89,12 +89,28 @@ class EmailTemplate extends Model
         return array_values(array_diff($referenced, array_keys($data)));
     }
 
+    /**
+     * Forces Blade to treat the stored template as inline content.
+     *
+     * Blade::render() first asks whether the string it was given is the name of
+     * an existing view, and if it is, renders that FILE instead of the text --
+     * then, because of deleteCachedView, unlinks it. A template subject of
+     * "welcome" therefore rendered resources/views/welcome.blade.php into the
+     * subject line and deleted the file from disk. (View names are matched
+     * case-insensitively on macOS, so "Welcome" did it too.)
+     *
+     * A leading Blade comment can never be a view name, so lookup always fails
+     * and the string is compiled as content. The comment compiles to nothing,
+     * leaving the rendered output byte-for-byte unchanged.
+     */
+    private const INLINE_GUARD = '{{-- inline --}}';
+
     private function renderString(string $template, array $data): string
     {
         foreach (self::FORBIDDEN_PATTERNS as $pattern) {
             $template = preg_replace($pattern, '', $template);
         }
 
-        return Blade::render($template, $data, deleteCachedView: true);
+        return Blade::render(self::INLINE_GUARD.$template, $data, deleteCachedView: true);
     }
 }

@@ -23,6 +23,9 @@ return [
         'http://localhost:3002',
         'http://127.0.0.1:3002',
         'https://investor.ap.boston',
+        // The marketing site calls /investor/session/refresh with credentials.
+        'https://ap.boston',
+        'https://www.ap.boston',
     ],
 
     'allowed_origins_patterns' => [],

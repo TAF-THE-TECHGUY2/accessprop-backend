@@ -6,7 +6,6 @@ use App\Mail\Concerns\UsesEmailTemplate;
 use App\Models\Investor;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
-use Illuminate\Mail\Mailables\Address;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
@@ -33,9 +32,14 @@ class InvestorPasswordResetMail extends Mailable
                 self::DEFAULT_SUBJECT,
                 $this->templateData(),
             ),
-            replyTo: [
-                new Address('hello@ap.boston', 'Access Properties'),
-            ],
+            // Sender identity comes from Settings, or this template's own
+            // override; the literals are the fallback for an unreadable database.
+            from: $this->templateFrom(self::TEMPLATE_KEY),
+            replyTo: $this->templateReplyTo(
+                self::TEMPLATE_KEY,
+                'hello@ap.boston',
+                'Access Properties',
+            ),
         );
     }
 
