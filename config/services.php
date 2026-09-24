@@ -84,4 +84,29 @@ return [
         'sandbox' => (bool) env('INVESTREADY_SANDBOX', true),
     ],
 
+    // Source of record for the fund's real estate: the Node/Mongo API behind
+    // the marketing site (api.ap.boston). This app never writes properties and
+    // keeps no copy — InvestorPortalPropertiesController proxies reads and
+    // caches them briefly.
+    //
+    // Two calls are needed. The page endpoint's PROPERTY_COLUMNS section is
+    // what says which properties belong to a fund, in what order, under which
+    // strategy label and with which cover image; /api/properties has no fund
+    // field of its own and cannot be filtered.
+    'properties' => [
+        'base_url' => env('PROPERTIES_API_BASE_URL'),
+        // Public today. Kept so a key can be added without a code change.
+        'key' => env('PROPERTIES_API_KEY'),
+        'page_endpoint' => env('PROPERTIES_API_PAGE_ENDPOINT', '/api/pages/slug/{slug}'),
+        'list_endpoint' => env('PROPERTIES_API_LIST_ENDPOINT', '/api/properties'),
+        // Fund codes are hyphenated ("aref-i"); the marketing page slugs are
+        // underscored ("aref_i"). Overridable per fund for anything that does
+        // not follow that rule: PROPERTIES_PAGE_SLUGS="aref-i:aref_i,other:x".
+        'page_slugs' => env('PROPERTIES_PAGE_SLUGS', ''),
+        // Short by design: the page must stay fast, but a property edit on the
+        // other site should surface here without anyone clearing a cache.
+        'cache_ttl' => (int) env('PROPERTIES_API_CACHE_TTL', 300),
+        'timeout' => (int) env('PROPERTIES_API_TIMEOUT', 8),
+    ],
+
 ];
