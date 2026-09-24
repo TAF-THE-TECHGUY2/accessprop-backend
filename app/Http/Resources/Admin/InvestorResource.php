@@ -16,7 +16,11 @@ class InvestorResource extends JsonResource
             'phone' => $this->phone,
             'country' => $this->country,
             'joinedAt' => optional($this->joined_at)->toIso8601String(),
-            'investmentAmount' => (float) $this->investment_amount,
+            // Everything the investor has put in, from the ledger — not the
+            // figure they named at signup, which never moves when they top up.
+            'investmentAmount' => $this->contributedCapital(),
+            // What they said they would invest, kept for the pipeline view.
+            'statedAmount' => (float) $this->investment_amount,
             'accreditationStatus' => $this->accreditation_status,
             'kycStatus' => $this->kyc_status,
             'accreditationVerificationStatus' => $this->accreditation_verification_status,

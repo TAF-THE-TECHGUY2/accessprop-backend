@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Admin\InvestorResource;
+use App\Models\FundTransaction;
 use App\Models\Investor;
 use App\Models\InvestorActivity;
 use Illuminate\Http\JsonResponse;
@@ -16,9 +17,17 @@ class DashboardController extends Controller
         $pendingKyc = Investor::whereIn('kyc_status', ['pending', 'submitted'])->count();
         $approvedInvestors = Investor::where('kyc_status', 'approved')->count();
         $activeInvestors = Investor::where('dashboard_status', 'active')->count();
-        $totalInvested = (float) Investor::sum('investment_amount');
+        // Summed from the ledger, not from investors.investment_amount — that
+        // column holds the amount named at signup and is never revised, so an
+        // investor who tops up still counts for their first deposit alone.
+        $totalInvested = (float) FundTransaction::query()
+            ->whereIn('type', FundTransaction::INFLOW_TYPES)
+            ->sum('gross_amount');
 
-        $recentInvestors = Investor::orderByDesc('joined_at')->limit(5)->get();
+        $recentInvestors = Investor::withContributedCapital()
+            ->orderByDesc('joined_at')
+            ->limit(5)
+            ->get();
 
         $recentActivity = InvestorActivity::with('investor:id,code,name')
             ->orderByDesc('occurred_at')

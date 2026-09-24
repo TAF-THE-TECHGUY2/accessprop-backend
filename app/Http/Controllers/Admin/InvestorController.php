@@ -52,7 +52,7 @@ class InvestorController extends Controller
         }
 
         return InvestorResource::collection(
-            $query->orderByDesc('joined_at')->get()
+            $query->withContributedCapital()->orderByDesc('joined_at')->get()
         );
     }
 
