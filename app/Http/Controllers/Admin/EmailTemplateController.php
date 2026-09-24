@@ -128,6 +128,9 @@ class EmailTemplateController extends Controller
                 'html' => $draft->renderHtml($sample),
                 'text' => $draft->renderText($sample),
                 'missingVariables' => $draft->missingVariables($sample),
+                // A Blade comment deletes what it wraps. Nothing else in the
+                // editor shows that, so it is reported next to the render.
+                'hiddenComments' => $draft->hiddenComments(),
                 'sender' => $this->resolvedSender($template, $data),
             ]);
         } catch (Throwable $e) {

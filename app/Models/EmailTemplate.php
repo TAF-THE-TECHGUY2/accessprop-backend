@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Blade;
+use Illuminate\Support\Str;
 
 class EmailTemplate extends Model
 {
@@ -39,6 +40,40 @@ class EmailTemplate extends Model
             ->where('key', $key)
             ->where('is_active', true)
             ->first();
+    }
+
+    /**
+     * Blade comments, which render to nothing.
+     *
+     * `{{-- ... --}}` is not an annotation the reader sees, it is a deletion:
+     * everything between the markers is removed from the email. Nothing else
+     * in the editor reveals that — the variable check has no variables to
+     * report, the body saves and reloads intact, and only the rendered output
+     * is short. Returned here so the preview can say what is being dropped.
+     *
+     * @return list<array{part: string, excerpt: string, length: int}>
+     */
+    public function hiddenComments(): array
+    {
+        $found = [];
+
+        foreach (['subject' => $this->subject, 'HTML body' => $this->body_html, 'plain text' => $this->body_text] as $part => $source) {
+            if (blank($source)) {
+                continue;
+            }
+
+            preg_match_all('/\{\{--(.*?)--\}\}/s', $source, $matches);
+
+            foreach ($matches[1] ?? [] as $inner) {
+                $found[] = [
+                    'part' => $part,
+                    'excerpt' => Str::limit(trim(preg_replace('/\s+/', ' ', $inner)), 120),
+                    'length' => mb_strlen(trim($inner)),
+                ];
+            }
+        }
+
+        return $found;
     }
 
     public static function containsForbiddenSyntax(?string $value): bool

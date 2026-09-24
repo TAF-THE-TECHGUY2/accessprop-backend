@@ -169,6 +169,40 @@ class EmailTemplatePreviewSenderTest extends TestCase
             ->assertJsonPath('text', 'The previously saved plain text.');
     }
 
+    public function test_a_blade_comment_is_reported_as_deleted_content(): void
+    {
+        // Reproduces what was found on the live welcome template: six body
+        // paragraphs wrapped in a comment, gone from the sent email with no
+        // indication anywhere in the editor.
+        $this->template([
+            'body_text' => "Dear Alex,\n\nthank you for creating your investor"
+                ."{{-- account.\n\nI founded Access Properties...\n\nTransparency matters. --}}"
+                .".\n\nBest regards,",
+        ]);
+
+        $response = $this->postJson('/api/admin/email-templates/investor_welcome/preview', [])
+            ->assertOk();
+
+        // The render really is short — this is a deletion, not a display quirk.
+        $this->assertStringNotContainsString('I founded Access Properties', $response->json('text'));
+        $this->assertStringContainsString('creating your investor.', $response->json('text'));
+
+        $hidden = $response->json('hiddenComments');
+        $this->assertCount(1, $hidden);
+        $this->assertSame('plain text', $hidden[0]['part']);
+        $this->assertStringContainsString('I founded Access Properties', $hidden[0]['excerpt']);
+        $this->assertGreaterThan(0, $hidden[0]['length']);
+    }
+
+    public function test_a_template_without_comments_reports_none(): void
+    {
+        $this->template(['body_text' => 'Hi {{ $firstName }}, nothing hidden here.']);
+
+        $this->postJson('/api/admin/email-templates/investor_welcome/preview', [])
+            ->assertOk()
+            ->assertJsonPath('hiddenComments', []);
+    }
+
     public function test_the_body_still_renders_alongside_the_sender(): void
     {
         $this->template();
