@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\AdminCommunicationController;
 use App\Http\Controllers\Admin\AdminFundController;
+use App\Http\Controllers\Admin\AdminLegalPageController;
 use App\Http\Controllers\Admin\AdminMessageThreadController;
 use App\Http\Controllers\Admin\AdminPortalDocumentController;
 use App\Http\Controllers\Admin\AgreementController;
@@ -30,6 +31,7 @@ use App\Http\Controllers\Investor\InvestorPortalProfileController;
 use App\Http\Controllers\Investor\InvestorPortalPropertiesController;
 use App\Http\Controllers\Public\InvestorRegistrationController;
 use App\Http\Controllers\Public\LegalLinksController;
+use App\Http\Controllers\Public\LegalPageController;
 use App\Http\Controllers\Webhooks\DocuSignWebhookController;
 use App\Http\Controllers\Webhooks\InvestReadyWebhookController;
 use App\Http\Controllers\Webhooks\PersonaWebhookController;
@@ -42,6 +44,9 @@ Route::prefix('investors')->middleware('throttle:10,1')->group(function () {
 
 // Read by the create-account page before the visitor has an account.
 Route::get('/legal-links', LegalLinksController::class)->middleware('throttle:60,1');
+// Public by necessity: the create-account form links here before the visitor
+// has an account, and terms behind a login are no terms at all.
+Route::get('/legal/{slug}', [LegalPageController::class, 'show'])->middleware('throttle:60,1');
 
 Route::post('/webhooks/persona', PersonaWebhookController::class);
 Route::post('/webhooks/docusign', DocuSignWebhookController::class);
@@ -140,6 +145,10 @@ Route::prefix('admin')->group(function () {
 
         // Communications (Phase 4 admin)
         Route::get('/communications', [AdminCommunicationController::class, 'index']);
+
+            Route::get('/legal-pages', [AdminLegalPageController::class, 'index']);
+            Route::get('/legal-pages/{slug}', [AdminLegalPageController::class, 'show']);
+            Route::patch('/legal-pages/{slug}', [AdminLegalPageController::class, 'update']);
 
             Route::get('/threads', [AdminMessageThreadController::class, 'index']);
             Route::get('/threads/{id}', [AdminMessageThreadController::class, 'show']);

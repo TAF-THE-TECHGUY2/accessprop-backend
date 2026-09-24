@@ -34,7 +34,15 @@ class LegalLinkSettingsTest extends TestCase
 
         $body = $this->getJson('/api/legal-links')->assertOk()->json();
 
-        $this->assertSame(['termsOfUseUrl', 'privacyPolicyUrl'], array_keys($body));
+        // The two booleans say whether each destination is a page this app
+        // renders, which the caller needs to decide between a client-side
+        // navigation and leaving the site. Nothing else belongs here.
+        $this->assertSame([
+            'termsOfUseUrl',
+            'termsOfUseInternal',
+            'privacyPolicyUrl',
+            'privacyPolicyInternal',
+        ], array_keys($body));
         $this->assertStringNotContainsString('ops@internal.test', json_encode($body));
     }
 
