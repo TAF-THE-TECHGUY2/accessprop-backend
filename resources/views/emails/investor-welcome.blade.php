@@ -14,10 +14,10 @@
                         <td style="padding:40px 48px 24px 48px; border-bottom:1px solid #e5e5e5;">
                             <table role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
                                 <tr>
-                                    <td style="font-size:14px; letter-spacing:0.08em; color:#666666; text-transform:uppercase;">
+                                    <td data-edit="Header brand" style="font-size:14px; letter-spacing:0.08em; color:#666666; text-transform:uppercase;">
                                         Access Properties
                                     </td>
-                                    <td align="right" style="font-size:12px; letter-spacing:0.08em; color:#999999; text-transform:uppercase;">
+                                    <td data-edit="Header reference" align="right" style="font-size:12px; letter-spacing:0.08em; color:#999999; text-transform:uppercase;">
                                         Ref: {{ strtoupper($investorCode) }}
                                     </td>
                                 </tr>
@@ -27,7 +27,7 @@
 
                     <tr>
                         <td style="padding:32px 48px 8px 48px;">
-                            <h1 style="margin:0; font-family: Georgia, 'Times New Roman', serif; font-size:28px; line-height:1.25; color:#0b0b0b; font-weight:normal;">
+                            <h1 data-edit="Headline" style="margin:0; font-family: Georgia, 'Times New Roman', serif; font-size:28px; line-height:1.25; color:#0b0b0b; font-weight:normal;">
                                 Welcome to Access Properties
                             </h1>
                         </td>
@@ -35,11 +35,11 @@
 
                     <tr>
                         <td style="padding:24px 48px 8px 48px; font-size:15px; line-height:1.7; color:#1a1a1a;">
-                            <p style="margin:0 0 24px 0; color:#444444;">
+                            <p data-edit="Author line" style="margin:0 0 24px 0; color:#444444;">
                                 From the Desk of Dionysios Kaskarelis, Founder and Chief Executive Officer
                             </p>
 
-                            <p style="margin:0 0 20px 0;">Dear {{ $firstName }},</p>
+                            <p data-edit="Greeting" style="margin:0 0 20px 0;">Dear {{ $firstName }},</p>
 
                             <p style="margin:0 0 20px 0;">
                                 Welcome to Access Properties, and thank you for creating your investor account.
@@ -85,11 +85,11 @@
                                 explore the offering and learn more about what we are building.
                             </p>
 
-                            <p style="margin:0 0 4px 0;">Best regards,</p>
-                            <p style="margin:0; font-family: Georgia, 'Times New Roman', serif; font-size:18px; color:#0b0b0b;">
+                            <p data-edit="Sign-off" style="margin:0 0 4px 0;">Best regards,</p>
+                            <p data-edit="Signature name" style="margin:0; font-family: Georgia, 'Times New Roman', serif; font-size:18px; color:#0b0b0b;">
                                 Dionysios Kaskarelis
                             </p>
-                            <p style="margin:0 0 24px 0; font-size:13px; color:#777777;">
+                            <p data-edit="Signature title" style="margin:0 0 24px 0; font-size:13px; color:#777777;">
                                 Founder &amp; CEO | Access Properties LLC
                             </p>
 
@@ -98,7 +98,7 @@
                                  logo is a worse first impression than no logo at all. --}}
                             <table role="presentation" cellspacing="0" cellpadding="0" border="0">
                                 <tr>
-                                    <td width="56" height="56" align="center" valign="middle" style="width:56px; height:56px; background-color:#0b0b0b; border-radius:4px; font-family: Georgia, 'Times New Roman', serif; font-size:20px; letter-spacing:0.04em; color:#ffffff;">
+                                    <td data-edit="false" width="56" height="56" align="center" valign="middle" style="width:56px; height:56px; background-color:#0b0b0b; border-radius:4px; font-family: Georgia, 'Times New Roman', serif; font-size:20px; letter-spacing:0.04em; color:#ffffff;">
                                         AP
                                     </td>
                                 </tr>
@@ -109,7 +109,7 @@
                     <tr>
                         <td style="padding:32px 48px 40px 48px;">
                             <hr style="border:none; border-top:1px solid #eeeeee; margin:0 0 20px 0;">
-                            <p style="margin:0; font-size:12px; line-height:1.6; color:#999999;">
+                            <p data-edit="Footer" style="margin:0; font-size:12px; line-height:1.6; color:#999999;">
                                 This email was sent to {{ $investor->email }} because an investor account was created
                                 with Access Properties. If you did not create this account, please contact support
                                 immediately.

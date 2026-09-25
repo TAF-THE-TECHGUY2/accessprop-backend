@@ -10,6 +10,7 @@ use App\Models\EmailTemplate;
 use App\Models\Investor;
 use App\Models\Setting;
 use App\Rules\VerifiedSendingDomain;
+use App\Support\EditableTemplate;
 use App\Support\MailSender;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -43,8 +44,12 @@ class EmailTemplateController extends Controller
 
         $data = $request->validate([
             'subject' => ['required', 'string', 'max:255'],
-            'bodyHtml' => ['required', 'string'],
+            // Required only in the raw editor. A guided save sends `fields`
+            // and the body is rebuilt from what is already stored.
+            'bodyHtml' => ['required_without:fields', 'string'],
             'bodyText' => ['nullable', 'string'],
+            'fields' => ['nullable', 'array'],
+            'fields.*' => ['nullable', 'string'],
             'isActive' => ['nullable', 'boolean'],
             // Blank means inherit the platform default from Settings.
             'fromName' => ['nullable', 'string', 'max:255'],
@@ -54,10 +59,23 @@ class EmailTemplateController extends Controller
 
         $this->guardAgainstForbiddenSyntax($data);
 
+        // Guided edits are written into the stored body by byte offset, so the
+        // table scaffolding and inline styles the email depends on are carried
+        // through untouched. The plain-text half is then regenerated from the
+        // same body — the two cannot say different things if only one of them
+        // is ever authored.
+        if (array_key_exists('fields', $data) && is_array($data['fields'])) {
+            $html = EditableTemplate::apply($template->body_html, $data['fields']);
+            $text = EditableTemplate::toPlainText($html);
+        } else {
+            $html = $data['bodyHtml'];
+            $text = $data['bodyText'] ?? null;
+        }
+
         $template->fill([
             'subject' => $data['subject'],
-            'body_html' => $data['bodyHtml'],
-            'body_text' => $data['bodyText'] ?? null,
+            'body_html' => $html,
+            'body_text' => $text,
             'is_active' => (bool) ($data['isActive'] ?? $template->is_active),
             'from_name' => $this->blankToNull($data['fromName'] ?? null),
             'from_address' => $this->blankToNull($data['fromAddress'] ?? null),
@@ -105,9 +123,19 @@ class EmailTemplateController extends Controller
             'fromName' => ['nullable', 'string', 'max:255'],
             'fromAddress' => ['nullable', 'email', 'max:255'],
             'replyToAddress' => ['nullable', 'email', 'max:255'],
+            'fields' => ['nullable', 'array'],
+            'fields.*' => ['nullable', 'string'],
         ]);
 
         $this->guardAgainstForbiddenSyntax($data);
+
+        // A guided preview renders the unsaved field values, same as the
+        // guided save would store them.
+        if (array_key_exists('fields', $data) && is_array($data['fields'])) {
+            $data['bodyHtml'] = EditableTemplate::apply($template->body_html, $data['fields']);
+            $data['bodyText'] = EditableTemplate::toPlainText($data['bodyHtml']);
+            $request->merge(['bodyHtml' => $data['bodyHtml'], 'bodyText' => $data['bodyText']]);
+        }
 
         // `??` cannot tell a field the editor didn't send from one the admin
         // deliberately emptied: clearing the plain-text box sends null, which
@@ -362,6 +390,10 @@ class EmailTemplateController extends Controller
         if ($withBody) {
             $base['bodyHtml'] = $t->body_html;
             $base['bodyText'] = $t->body_text;
+            // The prose, broken out for editing without touching the markup.
+            // An empty list means nothing in this template could be isolated
+            // safely, and the editor should stay on the raw view.
+            $base['fields'] = EditableTemplate::fields($t->body_html);
         }
 
         return $base;

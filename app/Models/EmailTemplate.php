@@ -98,7 +98,13 @@ class EmailTemplate extends Model
 
     public function renderHtml(array $data): string
     {
-        return $this->renderString($this->body_html, $data);
+        // data-edit marks a region for the admin editor. It means nothing to a
+        // mail client and has no business in what the investor receives.
+        return preg_replace(
+            '/\s+data-edit\s*=\s*"[^"]*"/i',
+            '',
+            $this->renderString($this->body_html, $data),
+        );
     }
 
     public function renderText(array $data): ?string
