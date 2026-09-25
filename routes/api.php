@@ -29,7 +29,7 @@ use App\Http\Controllers\Investor\InvestorPortalPasswordController;
 use App\Http\Controllers\Investor\InvestorPortalProfileController;
 use App\Http\Controllers\Investor\InvestorPortalPropertiesController;
 use App\Http\Controllers\Public\InvestorRegistrationController;
-use App\Http\Controllers\Public\LegalLinksController;
+use App\Http\Controllers\Public\PublicSettingsController;
 use App\Http\Controllers\Webhooks\DocuSignWebhookController;
 use App\Http\Controllers\Webhooks\InvestReadyWebhookController;
 use App\Http\Controllers\Webhooks\PersonaWebhookController;
@@ -40,8 +40,11 @@ Route::prefix('investors')->middleware('throttle:10,1')->group(function () {
     Route::post('/register', [InvestorRegistrationController::class, 'store']);
 });
 
-// Read by the create-account page before the visitor has an account.
-Route::get('/legal-links', LegalLinksController::class)->middleware('throttle:60,1');
+// Read by the create-account and sign-in pages, before the visitor has an
+// account. `/legal-links` is the endpoint's former name, kept so a bundle
+// cached from before the rename keeps working; it can go once one has expired.
+Route::get('/public-settings', PublicSettingsController::class)->middleware('throttle:60,1');
+Route::get('/legal-links', PublicSettingsController::class)->middleware('throttle:60,1');
 
 Route::post('/webhooks/persona', PersonaWebhookController::class);
 Route::post('/webhooks/docusign', DocuSignWebhookController::class);

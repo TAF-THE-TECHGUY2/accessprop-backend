@@ -23,6 +23,7 @@ class SettingsController extends Controller
         'demoPaymentsEnabled' => 'demo_payments_enabled',
         'termsOfUseUrl' => 'terms_of_use_url',
         'privacyPolicyUrl' => 'privacy_policy_url',
+        'loginBackUrl' => 'login_back_url',
         'mailFromName' => 'mail_from_name',
         'mailFromAddress' => 'mail_from_address',
         'mailReplyToAddress' => 'mail_reply_to_address',
@@ -50,6 +51,8 @@ class SettingsController extends Controller
             // on the create-account page, so reject anything that isn't a URL.
             'termsOfUseUrl' => ['sometimes', 'url', 'max:2048'],
             'privacyPolicyUrl' => ['sometimes', 'url', 'max:2048'],
+            // Nullable: cleared means hide the link, not link to nothing.
+            'loginBackUrl' => ['sometimes', 'nullable', 'url', 'max:2048'],
             // The name every investor sees in their inbox.
             'mailFromName' => ['sometimes', 'string', 'max:255'],
             'mailFromAddress' => ['sometimes', 'email', 'max:255', new VerifiedSendingDomain],
@@ -86,6 +89,7 @@ class SettingsController extends Controller
             'demoPaymentsEnabled' => $setting->demo_payments_enabled,
             'termsOfUseUrl' => $setting->terms_of_use_url,
             'privacyPolicyUrl' => $setting->privacy_policy_url,
+            'loginBackUrl' => $setting->login_back_url,
             'mailFromName' => $setting->mail_from_name,
             'mailFromAddress' => $setting->mail_from_address,
             'mailReplyToAddress' => $setting->mail_reply_to_address,

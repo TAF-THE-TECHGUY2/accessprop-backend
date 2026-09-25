@@ -15,6 +15,9 @@ class Setting extends Model
 
     public const DEFAULT_PRIVACY_POLICY_URL = 'https://www.ap.boston/privacy-policy';
 
+    /** Where the sign-in page's Back link points until an admin says otherwise. */
+    public const DEFAULT_LOGIN_BACK_URL = 'https://www.ap.boston';
+
     /**
      * Sender identity fallbacks, used when the row can't be read. They mirror
      * what MAIL_FROM_* shipped with so behaviour is unchanged by default.
@@ -67,6 +70,7 @@ class Setting extends Model
                 'demo_payments_enabled' => false,
                 'terms_of_use_url' => self::DEFAULT_TERMS_OF_USE_URL,
                 'privacy_policy_url' => self::DEFAULT_PRIVACY_POLICY_URL,
+                'login_back_url' => self::DEFAULT_LOGIN_BACK_URL,
                 'mail_from_name' => self::DEFAULT_MAIL_FROM_NAME,
                 'mail_from_address' => self::DEFAULT_MAIL_FROM_ADDRESS,
                 'mail_reply_to_address' => self::DEFAULT_MAIL_REPLY_TO_ADDRESS,
