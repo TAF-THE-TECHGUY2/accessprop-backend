@@ -16,7 +16,11 @@ class DashboardController extends Controller
         $totalInvestors = Investor::count();
         $pendingKyc = Investor::whereIn('kyc_status', ['pending', 'submitted'])->count();
         $approvedInvestors = Investor::where('kyc_status', 'approved')->count();
-        $activeInvestors = Investor::where('dashboard_status', 'active')->count();
+        // Units currently outstanding across all investors. Summed signed, so a
+        // redemption reduces the count — this is units in issue, not units ever
+        // issued. Taken from the ledger for the same reason the invested total
+        // is: fund_holdings is a derived cache.
+        $totalUnits = (float) FundTransaction::query()->sum('units');
         // Summed from the ledger, not from investors.investment_amount — that
         // column holds the amount named at signup and is never revised, so an
         // investor who tops up still counts for their first deposit alone.
@@ -74,7 +78,7 @@ class DashboardController extends Controller
                 'pendingKyc' => $pendingKyc,
                 'approvedInvestors' => $approvedInvestors,
                 'totalInvested' => $totalInvested,
-                'activeInvestors' => $activeInvestors,
+                'totalUnits' => $totalUnits,
             ],
             'recentInvestors' => InvestorResource::collection($recentInvestors)->resolve(),
             'recentActivity' => $recentActivity,
