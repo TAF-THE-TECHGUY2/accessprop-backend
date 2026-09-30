@@ -241,6 +241,67 @@ class InvestorController extends Controller
         ]);
     }
 
+    /**
+     * Correct an investor's contact details after they were first recorded.
+     *
+     * Everything else an admin can change about an investor is a status, and
+     * updateStatuses validates a fixed list of enums. A phone number typed
+     * wrongly at signup had no route at all: the create form accepts one, and
+     * nothing afterwards could touch it.
+     *
+     * Deliberately narrow. Name and email are identity — email is the login and
+     * the address every notice is sent to — and changing either belongs behind
+     * its own decision about re-verification, not smuggled in beside a
+     * typo fix.
+     */
+    public function updateDetails(Request $request, string $code): InvestorResource
+    {
+        $data = $request->validate([
+            // Nullable: an admin removing a wrong number is a legitimate edit.
+            'phone' => ['present', 'nullable', 'string', 'max:50'],
+        ]);
+
+        $investor = Investor::where('code', $code)->firstOrFail();
+
+        $before = $investor->phone;
+        $after = $this->blankToNull($data['phone']);
+
+        if ($before !== $after) {
+            $investor->update(['phone' => $after]);
+
+            // Contact details are how the firm reaches an investor about their
+            // money, so a change is worth a trail rather than a silent write.
+            $investor->activities()->create([
+                'code' => 'act-'.$investor->code.'-'.now()->timestamp,
+                'title' => 'Contact details updated',
+                'description' => sprintf(
+                    'Phone changed from %s to %s.',
+                    $before ?: 'none',
+                    $after ?: 'none',
+                ),
+                'occurred_at' => now(),
+            ]);
+        }
+
+        return new InvestorResource($investor->fresh()->load([
+            'documents',
+            'activities',
+            'messages',
+            'notes',
+            'integrationRequests',
+            'fundingInstructions',
+            'paymentConfirmations',
+            'partnerMatches',
+            'activityLogs',
+        ]));
+    }
+
+    /** An empty box means "no number on file", not an empty string. */
+    private function blankToNull(?string $value): ?string
+    {
+        return $value !== null && trim($value) !== '' ? trim($value) : null;
+    }
+
     public function updateStatuses(Request $request, string $code): InvestorResource|JsonResponse
     {
         $payload = $request->validate([
