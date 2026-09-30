@@ -147,7 +147,10 @@ class AdminFundController extends Controller
             'tagline' => ['sometimes', 'nullable', 'string', 'max:255'],
             'investmentFocus' => ['sometimes', 'nullable', 'string', 'max:255'],
             'market' => ['sometimes', 'nullable', 'string', 'max:255'],
-            'fundType' => ['sometimes', 'string', 'max:100'],
+            // Nullable like its sibling attributes: the portal drops a blank
+            // row rather than rendering a dash, so clearing it removes the
+            // Structure line instead of leaving "Structure —".
+            'fundType' => ['sometimes', 'nullable', 'string', 'max:100'],
             'status' => ['sometimes', 'string', 'in:active,closed,winding_down'],
             'inceptionDate' => ['sometimes', 'nullable', 'date'],
             'targetYield' => ['sometimes', 'nullable', 'string', 'max:50'],
