@@ -22,6 +22,7 @@ class InvestorResource extends JsonResource
             // What they said they would invest, kept for the pipeline view.
             'statedAmount' => (float) $this->investment_amount,
             'accreditationStatus' => $this->accreditation_status,
+            'isManagingMember' => (bool) $this->is_managing_member,
             'kycStatus' => $this->kyc_status,
             'accreditationVerificationStatus' => $this->accreditation_verification_status,
             'investmentStatus' => $this->investment_status,

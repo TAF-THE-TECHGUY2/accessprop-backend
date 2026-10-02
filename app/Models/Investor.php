@@ -23,6 +23,7 @@ class Investor extends Authenticatable
     protected $casts = [
         'joined_at' => 'datetime',
         'newsletter_opted_in' => 'boolean',
+        'is_managing_member' => 'boolean',
         'email_verified_at' => 'datetime',
         'investment_last_distribution' => 'datetime',
         'investment_amount' => 'decimal:2',

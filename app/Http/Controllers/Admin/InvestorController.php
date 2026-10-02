@@ -38,6 +38,14 @@ class InvestorController extends Controller
             });
         }
 
+        // Not a column value: managing members are accredited investors carrying
+        // a flag, so "Accredited" still lists them and this narrows to them.
+        if (($filters['accreditationStatus'] ?? null) === 'managing_member') {
+            $query->where('accreditation_status', 'accredited')
+                ->where('is_managing_member', true);
+            unset($filters['accreditationStatus']);
+        }
+
         foreach ([
             'kycStatus' => 'kyc_status',
             'accreditationStatus' => 'accreditation_status',
@@ -296,6 +304,53 @@ class InvestorController extends Controller
         ]));
     }
 
+    /**
+     * Mark or unmark an investor as a Managing Member. Only the label changes:
+     * they stay accredited for every pathway, document and audience decision.
+     */
+    public function updateManagingMember(Request $request, string $code): InvestorResource|JsonResponse
+    {
+        $data = $request->validate([
+            'isManagingMember' => ['required', 'boolean'],
+        ]);
+
+        $investor = Investor::where('code', $code)->firstOrFail();
+        $flag = (bool) $data['isManagingMember'];
+
+        if ($flag && $investor->accreditation_status !== 'accredited') {
+            return response()->json([
+                'message' => 'Only an accredited investor can be marked as a Managing Member.',
+                'errors' => [
+                    'isManagingMember' => ['Only an accredited investor can be marked as a Managing Member.'],
+                ],
+            ], 422);
+        }
+
+        if ((bool) $investor->is_managing_member !== $flag) {
+            $investor->update(['is_managing_member' => $flag]);
+            $investor->activities()->create([
+                'code' => 'act-'.$investor->code.'-'.now()->timestamp,
+                'title' => $flag ? 'Marked as Managing Member' : 'Managing Member removed',
+                'description' => $flag
+                    ? 'Admin marked this investor as a Managing Member.'
+                    : 'Admin removed the Managing Member designation.',
+                'occurred_at' => now(),
+            ]);
+        }
+
+        return new InvestorResource($investor->fresh()->load([
+            'documents',
+            'activities',
+            'messages',
+            'notes',
+            'integrationRequests',
+            'fundingInstructions',
+            'paymentConfirmations',
+            'partnerMatches',
+            'activityLogs',
+        ]));
+    }
+
     /** An empty box means "no number on file", not an empty string. */
     private function blankToNull(?string $value): ?string
     {
@@ -337,6 +392,11 @@ class InvestorController extends Controller
                 ?? ($investor->accreditation_status === 'accredited'
                     ? 'awaiting_accreditation_verification'
                     : 'pending_partner_review');
+        }
+
+        // A managing member must be accredited; a downgrade takes the label too.
+        if (($updates['accreditation_status'] ?? 'accredited') !== 'accredited') {
+            $updates['is_managing_member'] = false;
         }
 
         if (($payload['kycStatus'] ?? null) === 'rejected') {

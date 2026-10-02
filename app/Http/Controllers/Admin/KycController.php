@@ -45,6 +45,7 @@ class KycController extends Controller
                 'investorName' => $investor->name,
                 'investorEmail' => $investor->email,
                 'accreditationStatus' => $investor->accreditation_status,
+                'isManagingMember' => (bool) $investor->is_managing_member,
                 'documentType' => $latestDoc?->type ?? 'Profile Review',
                 'submittedDate' => optional($latestDoc?->submitted_at ?? $investor->joined_at)->toIso8601String(),
                 'kycStatus' => $investor->kyc_status,

@@ -88,6 +88,7 @@ class InvestorPortalProfileController extends Controller
             // schema cannot support.
             'status' => [
                 'accreditation' => $investor->accreditation_status,
+                'isManagingMember' => (bool) $investor->is_managing_member,
                 'kyc' => $investor->kyc_status,
             ],
             'readonly' => [
@@ -96,6 +97,7 @@ class InvestorPortalProfileController extends Controller
                 'investorType' => $investor->personal_investor_type,
                 'entityName' => $investor->personal_entity_name,
                 'accreditationStatus' => $investor->accreditation_status,
+                'isManagingMember' => (bool) $investor->is_managing_member,
                 'taxIdLast4' => $investor->personal_tax_id_last4,
                 'residency' => $investor->personal_residency,
                 'joinedAt' => optional($investor->joined_at)->toIso8601String(),
