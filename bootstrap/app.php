@@ -22,9 +22,11 @@ return Application::configure(basePath: dirname(__DIR__))
         // undo Laravel's cookie encryption. API routes do not run EncryptCookies
         // today, but say so explicitly so adding it later cannot silently break
         // the gate on ap.boston.
-        $middleware->encryptCookies(except: [
-            env('MEMBER_COOKIE_NAME', 'ap_member'),
-        ]);
+        //
+        // Hardcoded rather than read from env: deploys run `config:cache`, after
+        // which .env is not loaded and env() here would return null. If you ever
+        // change MEMBER_COOKIE_NAME, change this literal to match.
+        $middleware->encryptCookies(except: ['ap_member']);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->render(function (AuthenticationException $exception, Request $request) {
