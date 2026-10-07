@@ -56,7 +56,7 @@ Route::prefix('investor')->group(function () {
     Route::post('/password/forgot', [InvestorPasswordResetController::class, 'forgot'])->middleware('throttle:5,1');
     Route::post('/password/reset', [InvestorPasswordResetController::class, 'reset'])->middleware('throttle:10,1');
 
-    Route::middleware('auth:sanctum')->group(function () {
+    Route::middleware(['auth:sanctum', 'account:investor'])->group(function () {
         Route::post('/logout', [InvestorAuthController::class, 'logout']);
         Route::get('/me', [InvestorAuthController::class, 'me']);
         Route::post('/session/refresh', [InvestorAuthController::class, 'refreshSession'])
@@ -107,7 +107,7 @@ Route::prefix('admin')->group(function () {
 
     Route::post('/login', [AuthController::class, 'login']);
 
-    Route::middleware('auth:sanctum')->group(function () {
+    Route::middleware(['auth:sanctum', 'account:admin'])->group(function () {
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::get('/me', [AuthController::class, 'me']);
 
