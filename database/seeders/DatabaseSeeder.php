@@ -15,13 +15,18 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
-        User::updateOrCreate(
-            ['email' => 'admin@accessproperties.test'],
-            [
-                'name' => 'Admin',
-                'password' => bcrypt('password'),
-            ],
-        );
+        // A known login for a developer machine only. Run anywhere else this
+        // created admin@accessproperties.test / "password" — and, being
+        // updateOrCreate, put the password back to "password" on every seed.
+        if (app()->environment('local', 'testing')) {
+            User::updateOrCreate(
+                ['email' => 'admin@accessproperties.test'],
+                [
+                    'name' => 'Admin',
+                    'password' => bcrypt('password'),
+                ],
+            );
+        }
 
         \App\Models\Setting::singleton();
 
