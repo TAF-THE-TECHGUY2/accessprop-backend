@@ -309,9 +309,9 @@ class EmailTemplateController extends Controller
     private function guardAgainstForbiddenSyntax(array $data): void
     {
         foreach (['subject', 'bodyHtml', 'bodyText'] as $field) {
-            if (EmailTemplate::containsForbiddenSyntax($data[$field] ?? null)) {
+            if ($found = EmailTemplate::unsupportedSyntax($data[$field] ?? null)) {
                 throw ValidationException::withMessages([
-                    $field => 'Templates may not contain PHP or Blade include/extends directives.',
+                    $field => 'Templates can only use variables like {{ $firstName }} or {{ $investor->email }}. Not supported: '.implode(', ', array_slice($found, 0, 3)),
                 ]);
             }
         }

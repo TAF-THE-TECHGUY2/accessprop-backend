@@ -2,8 +2,8 @@
 
 namespace App\Models;
 
+use App\Support\SafeTemplate;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Str;
 
 class EmailTemplate extends Model
@@ -13,21 +13,6 @@ class EmailTemplate extends Model
     protected $casts = [
         'variables' => 'array',
         'is_active' => 'boolean',
-    ];
-
-    /**
-     * Blade compiles to PHP, so an admin-authored template is effectively code.
-     * These directives are rejected at validation time and stripped defensively
-     * here so a malicious or careless edit can't execute arbitrary PHP.
-     */
-    public const FORBIDDEN_PATTERNS = [
-        '/@php\b/i',
-        '/<\?php/i',
-        '/<\?=/',
-        '/@include\b/i',
-        '/@extends\b/i',
-        '/@inject\b/i',
-        '/@each\b/i',
     ];
 
     /**
@@ -76,19 +61,14 @@ class EmailTemplate extends Model
         return $found;
     }
 
-    public static function containsForbiddenSyntax(?string $value): bool
+    /**
+     * Template syntax the renderer will not process, for the editor to refuse.
+     *
+     * @return list<string>
+     */
+    public static function unsupportedSyntax(?string $value): array
     {
-        if ($value === null || $value === '') {
-            return false;
-        }
-
-        foreach (self::FORBIDDEN_PATTERNS as $pattern) {
-            if (preg_match($pattern, $value)) {
-                return true;
-            }
-        }
-
-        return false;
+        return SafeTemplate::unsupported($value);
     }
 
     public function renderSubject(array $data): string
@@ -130,28 +110,9 @@ class EmailTemplate extends Model
         return array_values(array_diff($referenced, array_keys($data)));
     }
 
-    /**
-     * Forces Blade to treat the stored template as inline content.
-     *
-     * Blade::render() first asks whether the string it was given is the name of
-     * an existing view, and if it is, renders that FILE instead of the text --
-     * then, because of deleteCachedView, unlinks it. A template subject of
-     * "welcome" therefore rendered resources/views/welcome.blade.php into the
-     * subject line and deleted the file from disk. (View names are matched
-     * case-insensitively on macOS, so "Welcome" did it too.)
-     *
-     * A leading Blade comment can never be a view name, so lookup always fails
-     * and the string is compiled as content. The comment compiles to nothing,
-     * leaving the rendered output byte-for-byte unchanged.
-     */
-    private const INLINE_GUARD = '{{-- inline --}}';
-
+    /** See App\Support\SafeTemplate: these templates are filled in, never compiled. */
     private function renderString(string $template, array $data): string
     {
-        foreach (self::FORBIDDEN_PATTERNS as $pattern) {
-            $template = preg_replace($pattern, '', $template);
-        }
-
-        return Blade::render(self::INLINE_GUARD.$template, $data, deleteCachedView: true);
+        return SafeTemplate::render($template, $data);
     }
 }
