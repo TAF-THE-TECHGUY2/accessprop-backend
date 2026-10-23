@@ -55,7 +55,9 @@ class AuthController extends Controller
     private function signIn(User $user, ?string $deviceToken = null): JsonResponse
     {
         return response()->json([
-            'token' => $user->createToken('admin-spa')->plainTextToken,
+            // A working day. Tokens used to live forever, so one lifted from a
+            // browser stayed good until that device signed out.
+            'token' => $user->createToken('admin-spa', ['*'], now()->addHours(12))->plainTextToken,
             'user' => $this->present($user),
             'twoFactorSetupRequired' => ! $user->hasTwoFactorEnabled(),
             'deviceToken' => $deviceToken,

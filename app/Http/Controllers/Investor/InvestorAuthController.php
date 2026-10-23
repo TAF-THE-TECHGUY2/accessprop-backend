@@ -50,7 +50,9 @@ class InvestorAuthController extends Controller
 
     private function signIn(Investor $investor, ?string $deviceToken = null): JsonResponse
     {
-        $token = $investor->createToken('investor-dashboard', ['investor'])->plainTextToken;
+        // A week: investors sign in far less often than admins, but a token
+        // should not outlive the browser it was issued to indefinitely.
+        $token = $investor->createToken('investor-dashboard', ['investor'], now()->addDays(7))->plainTextToken;
 
         $response = response()->json([
             'token' => $token,
