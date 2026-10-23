@@ -114,7 +114,7 @@ class InvestorRegistrationController extends Controller
 
         $this->sendWelcomeEmail($investor);
 
-        $token = $investor->createToken('onboarding-session', ['investor'])->plainTextToken;
+        $token = $investor->createToken('onboarding-session', ['investor'], now()->addDays(7))->plainTextToken;
 
         return response()->json([
             'code' => $investor->code,
@@ -141,11 +141,15 @@ class InvestorRegistrationController extends Controller
     private function resolveOfferingFund(?string $fundCode): Fund
     {
         if ($fundCode !== null && $fundCode !== '') {
-            $fund = Fund::where('code', $fundCode)->first();
+            // Open offerings only. Any code used to be accepted, and fund_id
+            // is what grants a fund's documents, so naming a draft or closed
+            // fund at signup opened its documents to anyone. One message for
+            // every refusal, so codes cannot be probed for.
+            $fund = Fund::where('code', $fundCode)->where('status', 'active')->first();
 
             if (! $fund) {
                 throw ValidationException::withMessages([
-                    'fundCode' => "No fund exists with code '{$fundCode}'.",
+                    'fundCode' => 'That fund is not open for investment.',
                 ]);
             }
 

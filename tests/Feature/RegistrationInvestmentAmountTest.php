@@ -26,9 +26,9 @@ class RegistrationInvestmentAmountTest extends TestCase
         Fund::create(['code' => 'aref-i', 'name' => 'Access Real Estate Fund I', 'status' => 'active']);
     }
 
-    private function register(mixed $amount)
+    private function register(mixed $amount, array $extra = [])
     {
-        return $this->postJson('/api/investors/register', [
+        return $this->postJson('/api/investors/register', $extra + [
             'firstName' => 'Ada',
             'lastName' => 'Lovelace',
             'email' => 'ada@example.com',
@@ -70,5 +70,19 @@ class RegistrationInvestmentAmountTest extends TestCase
     public function test_an_implausibly_large_figure_is_refused(): void
     {
         $this->register(5_000_000_000)->assertStatus(422)->assertJsonValidationErrors('investmentAmount');
+    }
+
+    public function test_a_fund_that_is_not_open_cannot_be_named(): void
+    {
+        Fund::create(['code' => 'aref-ii', 'name' => 'Access Real Estate Fund II', 'status' => 'draft']);
+
+        $this->register(25000, ['fundCode' => 'aref-ii'])
+            ->assertStatus(422)
+            ->assertJsonPath('errors.fundCode.0', 'That fund is not open for investment.');
+
+        $this->register(25000, ['fundCode' => 'no-such-fund'])
+            ->assertJsonPath('errors.fundCode.0', 'That fund is not open for investment.');
+
+        $this->assertDatabaseMissing('investors', ['email' => 'ada@example.com']);
     }
 }
