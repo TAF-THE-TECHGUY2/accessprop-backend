@@ -30,7 +30,21 @@ class UserFactory extends Factory
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
+            // Admins must have two-factor on to use the admin API, so a
+            // factory admin has it; withoutTwoFactor() is the one who hasn't.
+            'two_factor_secret' => 'JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP',
+            'two_factor_recovery_codes' => [],
+            'two_factor_confirmed_at' => now(),
         ];
+    }
+
+    public function withoutTwoFactor(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'two_factor_secret' => null,
+            'two_factor_recovery_codes' => null,
+            'two_factor_confirmed_at' => null,
+        ]);
     }
 
     /**

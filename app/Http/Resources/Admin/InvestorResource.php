@@ -23,6 +23,7 @@ class InvestorResource extends JsonResource
             'statedAmount' => (float) $this->investment_amount,
             'accreditationStatus' => $this->accreditation_status,
             'isManagingMember' => (bool) $this->is_managing_member,
+            'twoFactorEnabled' => $this->hasTwoFactorEnabled(),
             'kycStatus' => $this->kyc_status,
             'accreditationVerificationStatus' => $this->accreditation_verification_status,
             'investmentStatus' => $this->investment_status,

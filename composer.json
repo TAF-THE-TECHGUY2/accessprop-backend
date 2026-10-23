@@ -7,12 +7,14 @@
     "license": "MIT",
     "require": {
         "php": "^8.3",
+        "bacon/bacon-qr-code": "^3.1",
         "docusign/esign-client": "^8.0",
         "firebase/php-jwt": "^6.11",
         "laravel/framework": "^13.7",
         "laravel/sanctum": "^4.0",
         "laravel/tinker": "^3.0",
         "league/flysystem-aws-s3-v3": "~3.0",
+        "pragmarx/google2fa": "^9.1",
         "stripe/stripe-php": "^20.2",
         "symfony/http-client": "^8.0",
         "symfony/mailgun-mailer": "^8.0"

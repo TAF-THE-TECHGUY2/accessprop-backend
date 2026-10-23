@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Investor;
 
+use App\Http\Controllers\Concerns\HandlesTwoFactorLogin;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Admin\InvestorResource;
 use App\Models\Investor;
@@ -14,6 +15,8 @@ use Illuminate\Support\Facades\Hash;
 
 class InvestorAuthController extends Controller
 {
+    use HandlesTwoFactorLogin;
+
     public function login(Request $request): JsonResponse
     {
         $validated = $request->validate([
@@ -27,11 +30,32 @@ class InvestorAuthController extends Controller
             return response()->json(['message' => 'Invalid credentials'], 422);
         }
 
+        if ($challenge = $this->twoFactorGate($request, 'investor', $investor)) {
+            return $challenge;
+        }
+
+        return $this->signIn($investor);
+    }
+
+    public function twoFactor(Request $request): JsonResponse
+    {
+        $investor = $this->resolveTwoFactorLogin($request, 'investor');
+
+        if ($investor instanceof JsonResponse) {
+            return $investor;
+        }
+
+        return $this->signIn($investor, $this->rememberDeviceIfAsked($request, $investor));
+    }
+
+    private function signIn(Investor $investor, ?string $deviceToken = null): JsonResponse
+    {
         $token = $investor->createToken('investor-dashboard', ['investor'])->plainTextToken;
 
         $response = response()->json([
             'token' => $token,
             'investor' => new InvestorResource($this->loadRelations($investor)),
+            'deviceToken' => $deviceToken,
         ]);
 
         // Also unlocks the gated fund pages on ap.boston -- see config/member.php.

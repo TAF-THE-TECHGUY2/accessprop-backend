@@ -20,6 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->alias([
             'account' => \App\Http\Middleware\EnsureAccountType::class,
+            'two-factor' => \App\Http\Middleware\EnsureTwoFactorEnrolled::class,
         ]);
 
         // The member cookie is read by the CMS (a Node service), which cannot

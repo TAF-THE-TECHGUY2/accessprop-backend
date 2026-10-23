@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\HasTwoFactorAuthentication;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
@@ -11,6 +12,7 @@ use Laravel\Sanctum\HasApiTokens;
 class Investor extends Authenticatable
 {
     use HasApiTokens;
+    use HasTwoFactorAuthentication;
     use Notifiable;
 
     protected $guarded = ['id'];

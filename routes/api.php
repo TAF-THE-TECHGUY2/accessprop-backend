@@ -30,6 +30,7 @@ use App\Http\Controllers\Investor\InvestorPortalProfileController;
 use App\Http\Controllers\Investor\InvestorPortalPropertiesController;
 use App\Http\Controllers\Public\InvestorRegistrationController;
 use App\Http\Controllers\Public\PublicSettingsController;
+use App\Http\Controllers\TwoFactorController;
 use App\Http\Controllers\Webhooks\DocuSignWebhookController;
 use App\Http\Controllers\Webhooks\InvestReadyWebhookController;
 use App\Http\Controllers\Webhooks\PersonaWebhookController;
@@ -52,13 +53,22 @@ Route::post('/webhooks/investready', InvestReadyWebhookController::class);
 Route::post('/webhooks/stripe', StripeWebhookController::class);
 
 Route::prefix('investor')->group(function () {
-    Route::post('/login', [InvestorAuthController::class, 'login']);
+    Route::post('/login', [InvestorAuthController::class, 'login'])->middleware('throttle:10,1');
+    Route::post('/login/two-factor', [InvestorAuthController::class, 'twoFactor'])->middleware('throttle:10,1');
     Route::post('/password/forgot', [InvestorPasswordResetController::class, 'forgot'])->middleware('throttle:5,1');
     Route::post('/password/reset', [InvestorPasswordResetController::class, 'reset'])->middleware('throttle:10,1');
 
     Route::middleware(['auth:sanctum', 'account:investor'])->group(function () {
         Route::post('/logout', [InvestorAuthController::class, 'logout']);
         Route::get('/me', [InvestorAuthController::class, 'me']);
+
+        // Authenticator-app sign-in: optional for investors.
+        Route::get('/two-factor', [TwoFactorController::class, 'show']);
+        Route::post('/two-factor/setup', [TwoFactorController::class, 'setup']);
+        Route::post('/two-factor/confirm', [TwoFactorController::class, 'confirm'])->middleware('throttle:10,1');
+        Route::post('/two-factor/recovery-codes', [TwoFactorController::class, 'regenerateRecoveryCodes'])->middleware('throttle:10,1');
+        Route::delete('/two-factor/devices', [TwoFactorController::class, 'forgetDevices']);
+        Route::delete('/two-factor', [TwoFactorController::class, 'disable'])->middleware('throttle:10,1');
         Route::post('/session/refresh', [InvestorAuthController::class, 'refreshSession'])
             ->middleware('throttle:30,60');
         Route::post('/persona/start', [InvestorPersonaController::class, 'start']);
@@ -105,11 +115,23 @@ Route::prefix('admin')->group(function () {
         'timestamp' => now()->toIso8601String(),
     ]));
 
-    Route::post('/login', [AuthController::class, 'login']);
+    Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:10,1');
+    Route::post('/login/two-factor', [AuthController::class, 'twoFactor'])->middleware('throttle:10,1');
 
+    // Reachable before two-factor is set up: signing out, and setting it up.
     Route::middleware(['auth:sanctum', 'account:admin'])->group(function () {
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::get('/me', [AuthController::class, 'me']);
+
+        Route::get('/two-factor', [TwoFactorController::class, 'show']);
+        Route::post('/two-factor/setup', [TwoFactorController::class, 'setup']);
+        Route::post('/two-factor/confirm', [TwoFactorController::class, 'confirm'])->middleware('throttle:10,1');
+        Route::post('/two-factor/recovery-codes', [TwoFactorController::class, 'regenerateRecoveryCodes'])->middleware('throttle:10,1');
+        Route::delete('/two-factor/devices', [TwoFactorController::class, 'forgetDevices']);
+    });
+
+    // Everything else needs two-factor on: it is required for admins.
+    Route::middleware(['auth:sanctum', 'account:admin', 'two-factor'])->group(function () {
 
         Route::get('/dashboard', [DashboardController::class, 'index']);
         Route::get('/reports', [ReportsController::class, 'index']);
@@ -122,6 +144,7 @@ Route::prefix('admin')->group(function () {
         Route::patch('/investors/{code}/managing-member', [InvestorController::class, 'updateManagingMember']);
         Route::post('/investors/{code}/investments', [InvestorController::class, 'storeInvestment']);
         Route::delete('/investors/{code}', [InvestorController::class, 'destroy']);
+        Route::delete('/investors/{code}/two-factor', [InvestorController::class, 'resetTwoFactor']);
         Route::get('/investors/{code}/investready', [InvestorIntegrationController::class, 'showInvestReady']);
         Route::post('/investors/{code}/investready/resync', [InvestorIntegrationController::class, 'resyncInvestReady']);
         Route::get('/investors/{code}/stripe', [InvestorIntegrationController::class, 'showStripe']);

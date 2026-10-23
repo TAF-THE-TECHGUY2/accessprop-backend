@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Support\TwoFactor;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Admin\InvestorResource;
 use App\Models\FundTransaction;
@@ -334,6 +335,38 @@ class InvestorController extends Controller
                 'description' => $flag
                     ? 'Admin marked this investor as a Managing Member.'
                     : 'Admin removed the Managing Member designation.',
+                'occurred_at' => now(),
+            ]);
+        }
+
+        return new InvestorResource($investor->fresh()->load([
+            'documents',
+            'activities',
+            'messages',
+            'notes',
+            'integrationRequests',
+            'fundingInstructions',
+            'paymentConfirmations',
+            'partnerMatches',
+            'activityLogs',
+        ]));
+    }
+
+    /**
+     * For an investor who has lost their phone and their recovery codes. Their
+     * next sign-in is password only, and they can set it up again from their
+     * profile. Every remembered device is forgotten with it.
+     */
+    public function resetTwoFactor(string $code, TwoFactor $twoFactor): InvestorResource
+    {
+        $investor = Investor::where('code', $code)->firstOrFail();
+
+        if ($investor->hasTwoFactorEnabled() || $investor->two_factor_secret !== null) {
+            $twoFactor->disable($investor);
+            $investor->activities()->create([
+                'code' => 'act-'.$investor->code.'-'.now()->timestamp,
+                'title' => 'Two-factor sign-in reset',
+                'description' => 'Admin switched off two-factor sign-in so the investor can set it up again.',
                 'occurred_at' => now(),
             ]);
         }
