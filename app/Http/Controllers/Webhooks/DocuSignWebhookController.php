@@ -15,11 +15,21 @@ class DocuSignWebhookController extends Controller
         $rawBody = $request->getContent();
         $configuredSecret = (string) config('docusign.webhook_secret');
 
-        // HMAC verification is optional locally (no secret set) but required in
-        // any environment where the secret is configured. DocuSign Connect sends
-        // signature header `X-DocuSign-Signature-1` containing a base64-encoded
-        // HMAC-SHA256 of the raw body using the shared secret.
-        if ($configuredSecret !== '') {
+        // DocuSign Connect sends `X-DocuSign-Signature-1`: a base64 HMAC-SHA256
+        // of the raw body with the shared secret.
+        //
+        // With no secret this used to skip the check everywhere, production
+        // included, so anyone could post "completed" for an envelope and have an
+        // unsigned agreement filed as signed. Unsigned events are now accepted
+        // only on a developer machine; anywhere else a missing secret refuses
+        // every event, the same as the Stripe, Persona and InvestReady hooks.
+        if ($configuredSecret === '') {
+            if (! app()->environment('local', 'testing')) {
+                Log::error('DocuSign webhook refused: DOCUSIGN_WEBHOOK_SECRET is not set.');
+
+                return response()->json(['message' => 'Webhook not configured'], 503);
+            }
+        } else {
             $signatureHeader = $request->header('X-DocuSign-Signature-1');
 
             if (! $this->signatureMatches($rawBody, (string) $signatureHeader, $configuredSecret)) {
