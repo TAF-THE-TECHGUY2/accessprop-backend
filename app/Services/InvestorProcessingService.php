@@ -952,7 +952,8 @@ class InvestorProcessingService
 
     /**
      * Apply a Stripe webhook event to an investor. Idempotent — safe to call
-     * multiple times for the same event.
+     * multiple times for the same event, and once a payment has succeeded no
+     * later event changes it.
      */
     public function applyStripePaymentIntentEvent(string $intentId, string $eventType, array $intentData): ?Investor
     {
@@ -973,6 +974,28 @@ class InvestorProcessingService
         }
 
         return DB::transaction(function () use ($investor, $instruction, $intentId, $eventType, $intentData) {
+            // Re-read under a row lock. Stripe delivers the same event more
+            // than once, and the funding self-heal can apply `succeeded` while
+            // the webhook is landing; without the lock both minted units, so
+            // one ACH payment showed twice the capital in the ledger.
+            $instruction = FundingInstruction::query()->lockForUpdate()->find($instruction->id);
+
+            // Succeeded is final. A late `processing` used to move it back,
+            // after which the self-heal saw `succeeded` again and re-applied it.
+            if ($instruction->status === 'succeeded') {
+                Log::info('Stripe event ignored: payment already applied', [
+                    'intent' => $intentId,
+                    'event' => $eventType,
+                ]);
+
+                return $investor;
+            }
+
+            // A repeated `processing` would record a second confirmation.
+            if ($eventType === 'payment_intent.processing' && $instruction->status === 'processing') {
+                return $investor;
+            }
+
             $payload = (array) ($instruction->provider_payload ?? []);
             $payload['last_event'] = $eventType;
             $payload['status'] = $intentData['status'] ?? $payload['status'] ?? null;
