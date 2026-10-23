@@ -39,6 +39,9 @@ class InvestorRegistrationController extends Controller
                 // Direct (accredited) path requires $10k min; third-party (non-accredited)
                 // path allows $100 min.
                 $request->input('accreditationStatus') === 'accredited' ? 'min:10000' : 'min:100',
+                // Larger than any single subscription this fund takes; past it
+                // the figure is a typo, and it becomes the agreement amount.
+                'max:100000000',
             ],
             'receiveUpdates' => ['nullable', 'boolean'],
             // Optional today because a single offering is open. Present so the
