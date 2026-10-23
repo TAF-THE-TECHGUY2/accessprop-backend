@@ -96,6 +96,7 @@ Route::prefix('investor')->group(function () {
 
         Route::get('/portal/documents', [InvestorPortalDocumentsController::class, 'index']);
         Route::get('/portal/documents/{id}/download', [InvestorPortalDocumentsController::class, 'download']);
+        Route::get('/portal/agreements/{id}/download', [InvestorPortalDocumentsController::class, 'downloadSigned']);
 
         // Secure messaging. Sends are throttled: an investor can open a thread
         // themselves, which is a write anyone with a login can trigger.

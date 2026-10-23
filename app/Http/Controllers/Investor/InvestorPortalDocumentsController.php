@@ -6,13 +6,18 @@ use App\Http\Controllers\Controller;
 use App\Models\Fund;
 use App\Models\Investor;
 use App\Models\PortalDocument;
+use App\Models\SigningEnvelope;
+use App\Services\DocuSign\Client as DocuSignClient;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Http\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
 
 class InvestorPortalDocumentsController extends Controller
 {
@@ -56,7 +61,83 @@ class InvestorPortalDocumentsController extends Controller
             ];
         }
 
-        return response()->json(['data' => $grouped]);
+        return response()->json([
+            'data' => $grouped,
+            'signed' => $this->signedAgreements($investor),
+        ]);
+    }
+
+    /**
+     * The investor's own fully executed agreements — signed by them and
+     * countersigned. Kept apart from the uploaded documents: these are theirs
+     * alone, and they come from DocuSign rather than from an admin upload.
+     */
+    private function signedAgreements(Investor $investor): array
+    {
+        return SigningEnvelope::query()
+            ->where('investor_id', $investor->id)
+            ->where('status', SigningEnvelope::STATUS_COMPLETED)
+            ->orderByDesc('completed_at')
+            ->get()
+            ->map(fn (SigningEnvelope $envelope) => [
+                'id' => $envelope->id,
+                'title' => Str::headline($envelope->type ?: 'subscription_agreement'),
+                'signedAt' => optional($envelope->signed_at)->toIso8601String(),
+                'completedAt' => optional($envelope->completed_at)->toIso8601String(),
+            ])
+            ->values()
+            ->all();
+    }
+
+    public function downloadSigned(Request $request, int $id): Response|JsonResponse
+    {
+        // Scoped in the query, so another investor's id is simply not found.
+        $envelope = SigningEnvelope::query()
+            ->where('investor_id', $request->user()->id)
+            ->where('status', SigningEnvelope::STATUS_COMPLETED)
+            ->findOrFail($id);
+
+        $contents = null;
+
+        if ($envelope->signed_document_disk && $envelope->signed_document_path) {
+            $disk = Storage::disk($envelope->signed_document_disk);
+
+            if ($disk->exists($envelope->signed_document_path)) {
+                $contents = $disk->get($envelope->signed_document_path);
+            }
+        }
+
+        // Not archived yet (the download job runs after the completion
+        // webhook): fetch it from DocuSign directly, as the admin view does.
+        if ($contents === null) {
+            try {
+                $client = app(DocuSignClient::class);
+                $file = $client->envelopes()->getDocument(
+                    $client->accountId(),
+                    'combined',
+                    $envelope->docusign_envelope_id,
+                );
+                $contents = file_get_contents($file->getPathname()) ?: null;
+            } catch (Throwable $e) {
+                Log::warning('Investor signed agreement fetch failed', [
+                    'envelope_id' => $envelope->docusign_envelope_id,
+                    'message' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        if ($contents === null) {
+            return response()->json([
+                'message' => 'Your signed copy is still being prepared. Please try again in a few minutes.',
+            ], 404);
+        }
+
+        $filename = Str::slug($envelope->type ?: 'subscription-agreement').'-signed.pdf';
+
+        return response($contents, 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+        ]);
     }
 
     public function download(Request $request, int $id): RedirectResponse|JsonResponse|StreamedResponse
