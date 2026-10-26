@@ -314,4 +314,35 @@ class TwoFactorAuthenticationTest extends TestCase
 
         $this->assertNotSame($investor->fresh()->two_factor_secret, $raw);
     }
+
+    public function test_another_phone_can_be_added_without_resetting_the_first(): void
+    {
+        $investor = $this->investor();
+        $token = $investor->createToken('t', ['investor'])->plainTextToken;
+        [$secret] = $this->enrol('investor', $token);
+
+        $this->withToken($token)->postJson('/api/investor/two-factor/add-device', ['code' => '000000'])
+            ->assertStatus(422);
+
+        $shown = $this->withToken($token)
+            ->postJson('/api/investor/two-factor/add-device', ['code' => $this->codeFor($secret, 1)])
+            ->assertOk();
+
+        // The same secret, so the first phone keeps working and the second
+        // produces identical codes.
+        $this->assertSame($secret, $shown->json('secret'));
+        $this->assertStringContainsString('<svg', $shown->json('qrSvg'));
+        $this->assertTrue($investor->fresh()->hasTwoFactorEnabled());
+    }
+
+    public function test_an_admin_can_add_another_phone_too(): void
+    {
+        $admin = User::factory()->withoutTwoFactor()->create();
+        $token = $admin->createToken('t')->plainTextToken;
+        [$secret] = $this->enrol('admin', $token);
+
+        $this->withToken($token)->postJson('/api/admin/two-factor/add-device', ['code' => $this->codeFor($secret, 1)])
+            ->assertOk()
+            ->assertJsonPath('secret', $secret);
+    }
 }

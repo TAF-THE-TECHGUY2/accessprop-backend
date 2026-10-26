@@ -66,6 +66,18 @@ class TwoFactor
             'two_factor_last_timestep' => null,
         ])->save();
 
+        return $this->provisioning($account);
+    }
+
+    /**
+     * What an authenticator app scans: the account's existing secret as a QR
+     * code and as text. Every phone that scans it produces the same codes, so
+     * showing it again is how another device is added — nothing is reset and
+     * the phones already set up keep working.
+     */
+    public function provisioning(Model $account): array
+    {
+        $secret = $account->two_factor_secret;
         $url = $this->google2fa->getQRCodeUrl('Access Properties', $account->email, $secret);
 
         return [

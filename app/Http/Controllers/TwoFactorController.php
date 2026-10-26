@@ -64,6 +64,26 @@ class TwoFactorController extends Controller
         ]);
     }
 
+    /**
+     * Shows the QR code again so another phone can scan it. Gated on a current
+     * code: the secret is the whole of the second factor, so only someone
+     * already holding a working authenticator may see it.
+     */
+    public function addDevice(Request $request): JsonResponse
+    {
+        $data = $request->validate(['code' => ['required', 'string', 'max:20']]);
+        $account = $request->user();
+
+        if (! $account->hasTwoFactorEnabled() || ! $this->twoFactor->verifyCode($account, $data['code'])) {
+            return response()->json([
+                'message' => 'That code is not right.',
+                'errors' => ['code' => ['Invalid code.']],
+            ], 422);
+        }
+
+        return response()->json($this->twoFactor->provisioning($account));
+    }
+
     public function regenerateRecoveryCodes(Request $request): JsonResponse
     {
         $data = $request->validate(['code' => ['required', 'string', 'max:20']]);

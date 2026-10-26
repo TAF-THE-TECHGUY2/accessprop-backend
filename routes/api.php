@@ -67,6 +67,7 @@ Route::prefix('investor')->group(function () {
         Route::post('/two-factor/setup', [TwoFactorController::class, 'setup']);
         Route::post('/two-factor/confirm', [TwoFactorController::class, 'confirm'])->middleware('throttle:10,1');
         Route::post('/two-factor/recovery-codes', [TwoFactorController::class, 'regenerateRecoveryCodes'])->middleware('throttle:10,1');
+        Route::post('/two-factor/add-device', [TwoFactorController::class, 'addDevice'])->middleware('throttle:10,1');
         Route::delete('/two-factor/devices', [TwoFactorController::class, 'forgetDevices']);
         Route::delete('/two-factor', [TwoFactorController::class, 'disable'])->middleware('throttle:10,1');
         Route::post('/session/refresh', [InvestorAuthController::class, 'refreshSession'])
@@ -128,6 +129,7 @@ Route::prefix('admin')->group(function () {
         Route::post('/two-factor/setup', [TwoFactorController::class, 'setup']);
         Route::post('/two-factor/confirm', [TwoFactorController::class, 'confirm'])->middleware('throttle:10,1');
         Route::post('/two-factor/recovery-codes', [TwoFactorController::class, 'regenerateRecoveryCodes'])->middleware('throttle:10,1');
+        Route::post('/two-factor/add-device', [TwoFactorController::class, 'addDevice'])->middleware('throttle:10,1');
         Route::delete('/two-factor/devices', [TwoFactorController::class, 'forgetDevices']);
     });
 
