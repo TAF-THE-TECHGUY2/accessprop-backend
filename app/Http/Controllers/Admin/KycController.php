@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Admin\InvestorResource;
+use App\Models\InvestorActivity;
 use App\Models\Investor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -116,7 +117,7 @@ class KycController extends Controller
         $investor->update($updates);
 
         $investor->activities()->create([
-            'code' => 'act-'.$investor->code.'-'.now()->timestamp,
+            'code' => InvestorActivity::newCode($investor->code),
             'title' => 'KYC '.$payload['kycStatus'],
             'description' => 'Compliance reviewer set KYC status to '.$payload['kycStatus'].'.',
             'occurred_at' => now(),
