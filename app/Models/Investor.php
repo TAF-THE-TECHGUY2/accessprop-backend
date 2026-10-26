@@ -34,6 +34,31 @@ class Investor extends Authenticatable
         'password' => 'hashed',
     ];
 
+    public const US_PERSON = 'U.S. Person';
+
+    public const NON_US_PERSON = 'Non-U.S. Person';
+
+    /**
+     * Whether the investor signs a W-9 (true) or a W-8BEN (false).
+     *
+     * The investor's own answer at signup, held in personal_residency. Rows
+     * from before that question have only a guess from their country, or free
+     * text, so the country decides for them — an admin can correct it.
+     */
+    public function isUsTaxPerson(): bool
+    {
+        return match ($this->personal_residency) {
+            self::US_PERSON => true,
+            self::NON_US_PERSON => false,
+            default => ($this->address_country ?: $this->country) === 'United States',
+        };
+    }
+
+    public function taxForm(): string
+    {
+        return $this->isUsTaxPerson() ? 'W-9' : 'W-8BEN';
+    }
+
     public function documents(): HasMany
     {
         return $this->hasMany(InvestorDocument::class, 'investor_profile_id');

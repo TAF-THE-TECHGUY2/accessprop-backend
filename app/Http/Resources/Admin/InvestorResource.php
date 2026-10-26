@@ -24,6 +24,8 @@ class InvestorResource extends JsonResource
             'accreditationStatus' => $this->accreditation_status,
             'isManagingMember' => (bool) $this->is_managing_member,
             'twoFactorEnabled' => $this->hasTwoFactorEnabled(),
+            'isUsTaxPerson' => $this->isUsTaxPerson(),
+            'taxForm' => $this->taxForm(),
             'kycStatus' => $this->kyc_status,
             'accreditationVerificationStatus' => $this->accreditation_verification_status,
             'investmentStatus' => $this->investment_status,

@@ -143,6 +143,7 @@ Route::prefix('admin')->group(function () {
         Route::patch('/investors/{code}/details', [InvestorController::class, 'updateDetails']);
         Route::patch('/investors/{code}/statuses', [InvestorController::class, 'updateStatuses']);
         Route::patch('/investors/{code}/managing-member', [InvestorController::class, 'updateManagingMember']);
+        Route::patch('/investors/{code}/tax-status', [InvestorController::class, 'updateTaxStatus']);
         Route::post('/investors/{code}/investments', [InvestorController::class, 'storeInvestment']);
         Route::delete('/investors/{code}', [InvestorController::class, 'destroy']);
         Route::delete('/investors/{code}/two-factor', [InvestorController::class, 'resetTwoFactor']);

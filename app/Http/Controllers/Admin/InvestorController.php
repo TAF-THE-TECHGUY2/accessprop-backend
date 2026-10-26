@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Support\TwoFactor;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Admin\InvestorResource;
+use App\Models\InvestorActivity;
 use App\Models\FundTransaction;
 use App\Models\Investor;
 use App\Services\InvestorProcessingService;
@@ -103,6 +104,7 @@ class InvestorController extends Controller
             'stateProvince' => ['required', 'string', 'max:100'],
             'zipPostalCode' => ['required', 'string', 'max:20'],
             'country' => ['required', 'string', 'max:100'],
+            'usPerson' => ['nullable', 'boolean'],
             'investorType' => ['required', 'string', 'in:Individual,LLC,Trust,Corporation'],
             'entityName' => ['nullable', 'string', 'max:255'],
             'accreditationStatus' => ['required', 'string', 'in:accredited,non_accredited'],
@@ -172,9 +174,9 @@ class InvestorController extends Controller
             'personal_entity_name' => $data['investorType'] !== 'Individual'
                 ? $data['entityName']
                 : null,
-            'personal_residency' => $data['country'] === 'United States'
-                ? 'U.S. Person'
-                : 'Non-U.S. Person',
+            'personal_residency' => ($data['usPerson'] ?? $data['country'] === 'United States')
+                ? Investor::US_PERSON
+                : Investor::NON_US_PERSON,
         ]);
 
         $investor->activities()->create([
@@ -263,6 +265,82 @@ class InvestorController extends Controller
      * its own decision about re-verification, not smuggled in beside a
      * typo fix.
      */
+    /**
+     * Correct whether the investor is a US person for tax purposes, which
+     * decides the tax form in their signing package. Rows from before the
+     * signup question were guessed from the country.
+     */
+    public function updateTaxStatus(Request $request, string $code): InvestorResource
+    {
+        $data = $request->validate(['usPerson' => ['required', 'boolean']]);
+
+        $investor = Investor::where('code', $code)->firstOrFail();
+        $after = $data['usPerson'] ? Investor::US_PERSON : Investor::NON_US_PERSON;
+        $warning = null;
+
+        if ($investor->personal_residency !== $after) {
+            $before = $investor->personal_residency;
+            $investor->update(['personal_residency' => $after]);
+
+            // An agreement already out for signature was built from the old
+            // answer and still carries the other tax form. Nothing changes it
+            // after sending, so say so rather than let it be signed.
+            $warning = $this->staleEnvelopeWarning($investor->fresh());
+
+            $investor->activities()->create([
+                'code' => InvestorActivity::newCode($investor->code),
+                'title' => 'Tax status updated',
+                'description' => sprintf(
+                    'Changed from %s to %s; their signing package uses a %s.%s',
+                    $before ?: 'not recorded',
+                    $after,
+                    $investor->taxForm(),
+                    $warning ? ' '.$warning : '',
+                ),
+                'occurred_at' => now(),
+            ]);
+        }
+
+        return (new InvestorResource($investor->fresh()->load([
+            'documents',
+            'activities',
+            'messages',
+            'notes',
+            'integrationRequests',
+            'fundingInstructions',
+            'paymentConfirmations',
+            'partnerMatches',
+            'activityLogs',
+        ])))->additional(['warning' => $warning]);
+    }
+
+    /** Null, or what to tell the admin about an agreement sent with the other tax form. */
+    private function staleEnvelopeWarning(Investor $investor): ?string
+    {
+        $open = $investor->signingEnvelopes()
+            ->whereNotIn('status', [
+                \App\Models\SigningEnvelope::STATUS_COMPLETED,
+                \App\Models\SigningEnvelope::STATUS_DECLINED,
+                \App\Models\SigningEnvelope::STATUS_VOIDED,
+            ])
+            ->latest('id')
+            ->first();
+
+        if (! $open) {
+            return null;
+        }
+
+        try {
+            $current = app(\App\Services\DocuSign\EnvelopeBuilder::class)->resolveTemplateId($investor);
+        } catch (\Throwable) {
+            return null;
+        }
+
+        return $open->template_id !== $current
+            ? 'An agreement already sent to them uses the other tax form: void it and send a new one from the Agreements tab.'
+            : null;
+    }
+
     public function updateDetails(Request $request, string $code): InvestorResource
     {
         $data = $request->validate([
@@ -281,7 +359,7 @@ class InvestorController extends Controller
             // Contact details are how the firm reaches an investor about their
             // money, so a change is worth a trail rather than a silent write.
             $investor->activities()->create([
-                'code' => 'act-'.$investor->code.'-'.now()->timestamp,
+                'code' => InvestorActivity::newCode($investor->code),
                 'title' => 'Contact details updated',
                 'description' => sprintf(
                     'Phone changed from %s to %s.',
@@ -330,7 +408,7 @@ class InvestorController extends Controller
         if ((bool) $investor->is_managing_member !== $flag) {
             $investor->update(['is_managing_member' => $flag]);
             $investor->activities()->create([
-                'code' => 'act-'.$investor->code.'-'.now()->timestamp,
+                'code' => InvestorActivity::newCode($investor->code),
                 'title' => $flag ? 'Marked as Managing Member' : 'Managing Member removed',
                 'description' => $flag
                     ? 'Admin marked this investor as a Managing Member.'
@@ -364,7 +442,7 @@ class InvestorController extends Controller
         if ($investor->hasTwoFactorEnabled() || $investor->two_factor_secret !== null) {
             $twoFactor->disable($investor);
             $investor->activities()->create([
-                'code' => 'act-'.$investor->code.'-'.now()->timestamp,
+                'code' => InvestorActivity::newCode($investor->code),
                 'title' => 'Two-factor sign-in reset',
                 'description' => 'Admin switched off two-factor sign-in so the investor can set it up again.',
                 'occurred_at' => now(),
@@ -440,7 +518,7 @@ class InvestorController extends Controller
         if (! empty($updates)) {
             $investor->update($updates);
             $investor->activities()->create([
-                'code' => 'act-'.$investor->code.'-'.now()->timestamp,
+                'code' => InvestorActivity::newCode($investor->code),
                 'title' => 'Statuses updated',
                 'description' => 'Admin adjusted KYC, investment, or dashboard statuses.',
                 'occurred_at' => now(),

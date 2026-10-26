@@ -19,6 +19,13 @@ return [
 
     'templates' => [
         'subscription_agreement' => [
+            // The signing package by tax status: Subscription Agreement, MIPA
+            // and Joinder, then a W-9 for US persons or a W-8BEN otherwise.
+            'us_person' => env('DOCUSIGN_TEMPLATE_ID_US_PERSON'),
+            'non_us_person' => env('DOCUSIGN_TEMPLATE_ID_NON_US_PERSON'),
+
+            // Used while the two above are unset, so sending keeps working
+            // until the new templates exist in DocuSign.
             'accredited' => env('DOCUSIGN_TEMPLATE_ID_ACCREDITED', env('DOCUSIGN_SUBSCRIPTION_TEMPLATE_ID')),
             'non_accredited' => env('DOCUSIGN_TEMPLATE_ID_NON_ACCREDITED', env('DOCUSIGN_SUBSCRIPTION_TEMPLATE_ID')),
         ],

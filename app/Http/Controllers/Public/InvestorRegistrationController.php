@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Public;
 
 use App\Http\Controllers\Controller;
 use App\Mail\InvestorWelcomeMail;
+use App\Models\InvestorActivity;
 use App\Models\EmailLog;
 use App\Models\Fund;
 use App\Models\Investor;
@@ -43,6 +44,12 @@ class InvestorRegistrationController extends Controller
                 // the figure is a typo, and it becomes the agreement amount.
                 'max:100000000',
             ],
+            // Decides the tax form in the signing package: W-9 or W-8BEN. Asked
+            // rather than read off the address — a US citizen abroad still
+            // signs a W-9, and a foreign national resident in the US may too.
+            // The form requires it; absent (a page cached from before the
+            // question) falls back to the country rather than failing signup.
+            'usPerson' => ['nullable', 'boolean'],
             'receiveUpdates' => ['nullable', 'boolean'],
             // Optional today because a single offering is open. Present so the
             // flow does not need reworking when a second fund launches.
@@ -50,10 +57,9 @@ class InvestorRegistrationController extends Controller
         ]);
 
         $accreditation = $data['accreditationStatus'] === 'accredited' ? 'accredited' : 'non_accredited';
-        $isUS = $data['country'] === 'United States';
         $fund = $this->resolveOfferingFund($data['fundCode'] ?? null);
 
-        $investor = DB::transaction(function () use ($data, $accreditation, $isUS, $fund) {
+        $investor = DB::transaction(function () use ($data, $accreditation, $fund) {
             $maxNum = (int) Investor::query()
                 ->selectRaw("MAX(CAST(SUBSTRING(code, 5) AS UNSIGNED)) as max_num")
                 ->value('max_num');
@@ -88,7 +94,9 @@ class InvestorRegistrationController extends Controller
                 'personal_investor_type' => 'Individual',
                 'personal_entity_name' => null,
                 'personal_tax_id_last4' => null,
-                'personal_residency' => $isUS ? 'U.S. Person' : 'Non-U.S. Person',
+                'personal_residency' => ($data['usPerson'] ?? $data['country'] === 'United States')
+                    ? Investor::US_PERSON
+                    : Investor::NON_US_PERSON,
                 'experience' => $data['experience'],
                 // fund_id is authoritative. investment_fund_name is a
                 // denormalised copy kept in sync for the read paths that still
@@ -103,7 +111,7 @@ class InvestorRegistrationController extends Controller
             ]);
 
             $investor->activities()->create([
-                'code' => 'act-'.$code.'-'.now()->timestamp,
+                'code' => InvestorActivity::newCode($code),
                 'title' => 'Investor created account',
                 'description' => 'Onboarding flow completed; awaiting compliance review.',
                 'occurred_at' => now(),

@@ -63,14 +63,29 @@ class EnvelopeBuilder
         ]);
     }
 
-    private function resolveTemplateId(Investor $investor): string
+    /**
+     * The W-9 package for a US person, the W-8BEN package otherwise — once
+     * both are configured. Until then, the template by accreditation as
+     * before, for everyone: with only one set, the other group would quietly
+     * get the old package, which carries no tax form at all.
+     */
+    public function resolveTemplateId(Investor $investor): string
     {
+        $usTemplate = (string) config('docusign.templates.subscription_agreement.us_person');
+        $nonUsTemplate = (string) config('docusign.templates.subscription_agreement.non_us_person');
+
+        if ($usTemplate !== '' && $nonUsTemplate !== '') {
+            return $investor->isUsTaxPerson() ? $usTemplate : $nonUsTemplate;
+        }
+
+        $taxKey = $investor->isUsTaxPerson() ? 'us_person' : 'non_us_person';
+
         $key = $investor->accreditation_status === 'accredited' ? 'accredited' : 'non_accredited';
 
         $templateId = (string) config("docusign.templates.subscription_agreement.{$key}");
 
         if ($templateId === '') {
-            throw new RuntimeException("No DocuSign template configured for accreditation status: {$key}");
+            throw new RuntimeException("No DocuSign template configured for {$taxKey} or accreditation status: {$key}");
         }
 
         return $templateId;
