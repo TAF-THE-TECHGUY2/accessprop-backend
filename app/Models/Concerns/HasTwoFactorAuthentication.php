@@ -27,6 +27,12 @@ trait HasTwoFactorAuthentication
         return $this->two_factor_confirmed_at !== null && $this->two_factor_secret !== null;
     }
 
+    /** Whether this account is held at the setup screen. Admins: until it is on. */
+    public function needsTwoFactorSetup(): bool
+    {
+        return ! $this->hasTwoFactorEnabled();
+    }
+
     public function trustedDevices(): MorphMany
     {
         return $this->morphMany(TwoFactorTrustedDevice::class, 'authenticatable');

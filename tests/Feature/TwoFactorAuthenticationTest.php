@@ -279,11 +279,11 @@ class TwoFactorAuthenticationTest extends TestCase
         $token = $investor->createToken('t', ['investor'])->plainTextToken;
         [$secret] = $this->enrol('investor', $token);
 
-        $this->withToken($token)->deleteJson('/api/investor/two-factor', ['password' => 'wrong', 'code' => $this->codeFor($secret, 1)])
+        $this->withToken($token)->deleteJson('/api/investor/two-factor', ['password' => 'wrong', 'code' => $this->codeFor($secret, 1), 'acknowledged' => true])
             ->assertStatus(422);
         $this->assertTrue($investor->fresh()->hasTwoFactorEnabled());
 
-        $this->withToken($token)->deleteJson('/api/investor/two-factor', ['password' => 'password123', 'code' => $this->codeFor($secret, 1)])
+        $this->withToken($token)->deleteJson('/api/investor/two-factor', ['password' => 'password123', 'code' => $this->codeFor($secret, 1), 'acknowledged' => true])
             ->assertOk()
             ->assertJsonPath('enabled', false);
         $this->assertFalse($investor->fresh()->hasTwoFactorEnabled());
@@ -344,5 +344,78 @@ class TwoFactorAuthenticationTest extends TestCase
         $this->withToken($token)->postJson('/api/admin/two-factor/add-device', ['code' => $this->codeFor($secret, 1)])
             ->assertOk()
             ->assertJsonPath('secret', $secret);
+    }
+
+    // ---- Investors: required unless declined -----------------------------
+
+    public function test_an_investor_is_held_at_setup_when_it_is_required(): void
+    {
+        config(['two_factor.require_investors' => true]);
+        $investor = $this->investor();
+
+        $login = $this->postJson('/api/investor/login', ['email' => 'sample@example.com', 'password' => 'password123'])
+            ->assertOk()
+            ->assertJsonPath('twoFactorSetupRequired', true);
+        $token = $login->json('token');
+
+        $this->withToken($token)->getJson('/api/investor/portal/profile')
+            ->assertForbidden()
+            ->assertJsonPath('code', 'two_factor_setup_required');
+        $this->withToken($token)->getJson('/api/investor/me')->assertOk();
+
+        $this->enrol('investor', $token);
+        $this->withToken($token)->getJson('/api/investor/portal/profile')->assertOk();
+    }
+
+    public function test_declining_needs_the_risk_accepted_and_is_recorded(): void
+    {
+        config(['two_factor.require_investors' => true]);
+        $investor = $this->investor();
+        $token = $investor->createToken('t', ['investor'])->plainTextToken;
+
+        $this->withToken($token)->postJson('/api/investor/two-factor/opt-out', [])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('acknowledged');
+
+        $this->withToken($token)->postJson('/api/investor/two-factor/opt-out', ['acknowledged' => true])
+            ->assertOk()
+            ->assertJsonPath('setupRequired', false);
+
+        $this->app['auth']->forgetGuards();
+        $this->withToken($token)->getJson('/api/investor/portal/profile')->assertOk();
+
+        $activity = $investor->fresh()->activities()->latest('occurred_at')->first();
+        $this->assertSame('Two-factor sign-in declined', $activity->title);
+        $this->assertStringContainsString('shall not be liable', $activity->description);
+        $this->assertNotNull($investor->fresh()->two_factor_opted_out_at);
+    }
+
+    public function test_switching_it_off_also_needs_the_risk_accepted(): void
+    {
+        config(['two_factor.require_investors' => true]);
+        $investor = $this->investor();
+        $token = $investor->createToken('t', ['investor'])->plainTextToken;
+        [$secret] = $this->enrol('investor', $token);
+
+        $this->withToken($token)->deleteJson('/api/investor/two-factor', [
+            'password' => 'password123', 'code' => $this->codeFor($secret, 1),
+        ])->assertStatus(422)->assertJsonValidationErrors('acknowledged');
+        $this->assertTrue($investor->fresh()->hasTwoFactorEnabled());
+
+        $this->withToken($token)->deleteJson('/api/investor/two-factor', [
+            'password' => 'password123', 'code' => $this->codeFor($secret, 1), 'acknowledged' => true,
+        ])->assertOk()->assertJsonPath('enabled', false)->assertJsonPath('setupRequired', false);
+    }
+
+    public function test_turning_it_back_on_withdraws_the_opt_out(): void
+    {
+        config(['two_factor.require_investors' => true]);
+        $investor = $this->investor();
+        $token = $investor->createToken('t', ['investor'])->plainTextToken;
+
+        $this->withToken($token)->postJson('/api/investor/two-factor/opt-out', ['acknowledged' => true])->assertOk();
+        $this->enrol('investor', $token);
+
+        $this->assertNull($investor->fresh()->two_factor_opted_out_at);
     }
 }

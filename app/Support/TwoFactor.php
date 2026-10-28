@@ -106,6 +106,11 @@ class TwoFactor
             'two_factor_recovery_codes' => $codes,
         ])->save();
 
+        // Turning it back on withdraws an earlier decision to go without.
+        if ($account->getAttribute('two_factor_opted_out_at') !== null) {
+            $account->forceFill(['two_factor_opted_out_at' => null])->save();
+        }
+
         return $codes;
     }
 
@@ -135,6 +140,8 @@ class TwoFactor
     {
         return [
             'enabled' => $account->hasTwoFactorEnabled(),
+            'setupRequired' => $account->needsTwoFactorSetup(),
+            'optedOutAt' => optional($account->getAttribute('two_factor_opted_out_at'))->toIso8601String(),
             'confirmedAt' => optional($account->two_factor_confirmed_at)->toIso8601String(),
             'recoveryCodesLeft' => count($account->two_factor_recovery_codes ?? []),
             'trustedDevices' => $account->trustedDevices()

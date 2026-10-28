@@ -108,12 +108,16 @@ class TwoFactorController extends Controller
         return response()->json($this->twoFactor->status($request->user()));
     }
 
-    /** Investors only — see the class note. Needs the password as well as a code. */
+    /**
+     * Investors only — see the class note. Needs the password, a code, and
+     * acceptance of the risk warning, which is recorded.
+     */
     public function disable(Request $request): JsonResponse
     {
         $data = $request->validate([
             'password' => ['required', 'string'],
             'code' => ['required', 'string', 'max:20'],
+            'acknowledged' => ['accepted'],
         ]);
         $account = $request->user();
 
@@ -132,7 +136,47 @@ class TwoFactorController extends Controller
         }
 
         $this->twoFactor->disable($account);
+        $this->recordOptOut($request, $account, 'switched it off');
 
         return response()->json($this->twoFactor->status($account));
+    }
+
+    /**
+     * An investor who would rather not set it up at all: the same warning,
+     * accepted and recorded, instead of the setup screen.
+     */
+    public function optOut(Request $request): JsonResponse
+    {
+        $request->validate(['acknowledged' => ['accepted']]);
+        $account = $request->user();
+
+        if ($account->hasTwoFactorEnabled()) {
+            return response()->json([
+                'message' => 'Two-factor sign-in is on. Turn it off from your profile instead.',
+            ], 409);
+        }
+
+        $this->recordOptOut($request, $account, 'declined to set it up');
+
+        return response()->json($this->twoFactor->status($account->fresh()));
+    }
+
+    /** The acceptance, kept as evidence: when, from where, and the words agreed to. */
+    private function recordOptOut(Request $request, $account, string $how): void
+    {
+        $account->forceFill(['two_factor_opted_out_at' => now()])->save();
+
+        $account->activities()->create([
+            'code' => \App\Models\InvestorActivity::newCode($account->code),
+            'title' => 'Two-factor sign-in declined',
+            'description' => sprintf(
+                'Investor %s and accepted: "%s" IP %s; browser %s.',
+                $how,
+                config('two_factor.opt_out_acknowledgement'),
+                $request->ip() ?? 'unknown',
+                \Illuminate\Support\Str::limit((string) $request->userAgent(), 200),
+            ),
+            'occurred_at' => now(),
+        ]);
     }
 }

@@ -58,11 +58,14 @@ Route::prefix('investor')->group(function () {
     Route::post('/password/forgot', [InvestorPasswordResetController::class, 'forgot'])->middleware('throttle:5,1');
     Route::post('/password/reset', [InvestorPasswordResetController::class, 'reset'])->middleware('throttle:10,1');
 
+    // Reachable before two-factor is set up: signing out, and setting it up
+    // or declining it.
     Route::middleware(['auth:sanctum', 'account:investor'])->group(function () {
         Route::post('/logout', [InvestorAuthController::class, 'logout']);
         Route::get('/me', [InvestorAuthController::class, 'me']);
+        Route::post('/session/refresh', [InvestorAuthController::class, 'refreshSession'])
+            ->middleware('throttle:30,60');
 
-        // Authenticator-app sign-in: optional for investors.
         Route::get('/two-factor', [TwoFactorController::class, 'show']);
         Route::post('/two-factor/setup', [TwoFactorController::class, 'setup']);
         Route::post('/two-factor/confirm', [TwoFactorController::class, 'confirm'])->middleware('throttle:10,1');
@@ -70,8 +73,11 @@ Route::prefix('investor')->group(function () {
         Route::post('/two-factor/add-device', [TwoFactorController::class, 'addDevice'])->middleware('throttle:10,1');
         Route::delete('/two-factor/devices', [TwoFactorController::class, 'forgetDevices']);
         Route::delete('/two-factor', [TwoFactorController::class, 'disable'])->middleware('throttle:10,1');
-        Route::post('/session/refresh', [InvestorAuthController::class, 'refreshSession'])
-            ->middleware('throttle:30,60');
+        Route::post('/two-factor/opt-out', [TwoFactorController::class, 'optOut'])->middleware('throttle:10,1');
+    });
+
+    // Everything else needs two-factor on, or declined with the risk accepted.
+    Route::middleware(['auth:sanctum', 'account:investor', 'two-factor'])->group(function () {
         Route::post('/persona/start', [InvestorPersonaController::class, 'start']);
         Route::post('/persona/complete', [InvestorPersonaController::class, 'complete']);
         Route::post('/investready/start', [InvestReadyController::class, 'start']);

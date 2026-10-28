@@ -26,6 +26,7 @@ class Investor extends Authenticatable
         'joined_at' => 'datetime',
         'newsletter_opted_in' => 'boolean',
         'is_managing_member' => 'boolean',
+        'two_factor_opted_out_at' => 'datetime',
         'email_verified_at' => 'datetime',
         'investment_last_distribution' => 'datetime',
         'investment_amount' => 'decimal:2',
@@ -52,6 +53,17 @@ class Investor extends Authenticatable
             self::NON_US_PERSON => false,
             default => ($this->address_country ?: $this->country) === 'United States',
         };
+    }
+
+    /**
+     * Investors must have two-factor on, unless they declined it by accepting
+     * the risk warning.
+     */
+    public function needsTwoFactorSetup(): bool
+    {
+        return config('two_factor.require_investors')
+            && ! $this->hasTwoFactorEnabled()
+            && $this->two_factor_opted_out_at === null;
     }
 
     public function taxForm(): string

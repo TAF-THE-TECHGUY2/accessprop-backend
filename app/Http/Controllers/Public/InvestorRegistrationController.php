@@ -130,6 +130,7 @@ class InvestorRegistrationController extends Controller
             'kycStatus' => $investor->kyc_status,
             'accreditationStatus' => $investor->accreditation_status,
             'token' => $token,
+            'twoFactorSetupRequired' => $investor->needsTwoFactorSetup(),
         ], 201);
     }
 

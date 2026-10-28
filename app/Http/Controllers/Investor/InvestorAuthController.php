@@ -58,6 +58,7 @@ class InvestorAuthController extends Controller
             'token' => $token,
             'investor' => new InvestorResource($this->loadRelations($investor)),
             'deviceToken' => $deviceToken,
+            'twoFactorSetupRequired' => $investor->needsTwoFactorSetup(),
         ]);
 
         // Also unlocks the gated fund pages on ap.boston -- see config/member.php.
