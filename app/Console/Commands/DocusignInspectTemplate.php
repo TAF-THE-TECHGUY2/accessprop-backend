@@ -48,9 +48,10 @@ class DocusignInspectTemplate extends Command
         foreach ($kinds as $kind => $list) {
             foreach ($list ?? [] as $r) {
                 $this->line(sprintf(
-                    '  - %s: role "%s", recipientId=%s, routingOrder=%s, name=%s, email=%s',
+                    '  - %s: role %s, recipientId=%s, routingOrder=%s, name=%s, email=%s',
                     $kind,
-                    $r->getRoleName() ?? '',
+                    // Encoded, so an invisible character in a role name shows.
+                    json_encode($r->getRoleName() ?? '', JSON_UNESCAPED_UNICODE),
                     $r->getRecipientId(),
                     $r->getRoutingOrder(),
                     $r->getName() !== null && $r->getName() !== '' ? $r->getName() : '(blank)',
@@ -67,7 +68,11 @@ class DocusignInspectTemplate extends Command
         $known = [];
         foreach ($kinds as $list) {
             foreach ($list ?? [] as $r) {
+                // Fields point at a recipient by its GUID, not the short ID.
                 $known[(string) $r->getRecipientId()] = $r->getRoleName();
+                if (method_exists($r, 'getRecipientIdGuid') && $r->getRecipientIdGuid()) {
+                    $known[(string) $r->getRecipientIdGuid()] = $r->getRoleName();
+                }
             }
         }
         $docs = $client->templates()->listDocuments($client->accountId(), $templateId)->getTemplateDocuments() ?? [];
@@ -89,7 +94,7 @@ class DocusignInspectTemplate extends Command
                 $this->line('    (no fields)');
             }
             foreach ($byRecipient as $rid => $fields) {
-                $owner = isset($known[$rid]) ? 'role "'.$known[$rid].'"' : 'NO SUCH RECIPIENT — orphaned';
+                $owner = isset($known[$rid]) ? 'role "'.$known[$rid].'"' : 'unknown recipient';
                 $this->line(sprintf('    recipientId=%s (%s): %d fields', $rid, $owner, count($fields)));
                 foreach (array_slice($fields, 0, 40) as $f) {
                     $this->line('      - '.$f);

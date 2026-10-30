@@ -43,7 +43,8 @@ class EnvelopeBuilder
             counterSignerEmail: $counterSignerEmail,
             counterSignerName: $counterSignerName,
             pricing: $pricing,
-            recipientIds: $this->templateRecipientIds($templateId),
+            recipientIds: $ids = $this->templateRecipientIds($templateId),
+            templateRoleNames: array_keys($ids),
         ));
 
         return SigningEnvelope::create([
@@ -81,7 +82,8 @@ class EnvelopeBuilder
             counterSignerEmail: $counterSignerEmail,
             counterSignerName: $counterSignerName,
             pricing: $pricing,
-            recipientIds: $this->templateRecipientIds($templateId),
+            recipientIds: $ids = $this->templateRecipientIds($templateId),
+            templateRoleNames: array_keys($ids),
         ));
 
         return ['envelopeId' => $envelopeId, 'pricing' => $pricing];
@@ -243,9 +245,15 @@ class EnvelopeBuilder
         string $counterSignerName,
         ?array $pricing = null,
         array $recipientIds = [],
+        array $templateRoleNames = [],
     ): EnvelopeDefinition {
-        $investorRoleName = (string) config('docusign.roles.investor');
-        $counterSignerRoleName = (string) config('docusign.roles.counter_signer');
+        // The template's own spelling of each role, when it differs from the
+        // configured one only by spacing or case. DocuSign matches roles by
+        // exact name, and a stray non-breaking space typed into a role name in
+        // its editor is invisible but leaves that role unmatched and without
+        // an email.
+        $investorRoleName = $this->matchRoleName((string) config('docusign.roles.investor'), $templateRoleNames);
+        $counterSignerRoleName = $this->matchRoleName((string) config('docusign.roles.counter_signer'), $templateRoleNames);
 
         // The signing packages are sent as the template with its roles filled
         // in, DocuSign's plain form for one template: roles are matched by
@@ -319,6 +327,19 @@ class EnvelopeBuilder
             ->setEmailBlurb("Hi {$investor->name},\n\nYour subscription agreement for Access Properties is ready for signing. Please review and sign at your earliest convenience.\n\nIf you have any questions, reply to this email.\n\nThank you,\nAccess Properties")
             ->setCompositeTemplates([$compositeTemplate])
             ->setStatus('sent');
+    }
+
+    private function matchRoleName(string $configured, array $templateRoleNames): string
+    {
+        $normalise = fn (string $name) => mb_strtolower(trim(preg_replace('/[\s\x{00A0}\x{2007}\x{202F}]+/u', ' ', $name)));
+
+        foreach ($templateRoleNames as $name) {
+            if ($normalise((string) $name) === $normalise($configured)) {
+                return (string) $name;
+            }
+        }
+
+        return $configured;
     }
 
     private function buildTabs(string $role, Investor $investor): Tabs

@@ -83,7 +83,7 @@ class DocusignSendTestEnvelope extends Command
         if ($this->option('dry-run')) {
             $ids = $builder->templateRecipientIds($templateId);
             $this->line('');
-            $this->line('Recipient IDs read from the template: '.json_encode($ids));
+            $this->line('Roles in the template (exact): '.json_encode($ids, JSON_UNESCAPED_UNICODE));
             $definition = $builder->buildEnvelopeDefinition(
                 templateId: $templateId,
                 investor: $investor,
@@ -91,6 +91,7 @@ class DocusignSendTestEnvelope extends Command
                 counterSignerName: $counterName,
                 pricing: $withPricing ? $builder->quote($investor) : null,
                 recipientIds: $ids,
+                templateRoleNames: array_keys($ids),
             );
             $this->line(json_encode(
                 \DocuSign\eSign\ObjectSerializer::sanitizeForSerialization($definition),

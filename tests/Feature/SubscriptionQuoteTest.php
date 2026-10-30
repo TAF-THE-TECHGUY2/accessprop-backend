@@ -150,4 +150,21 @@ class SubscriptionQuoteTest extends TestCase
         $this->expectExceptionMessage('no published Base NAV');
         app(EnvelopeBuilder::class)->quote($this->investor());
     }
+
+    public function test_roles_take_the_template_s_exact_spelling(): void
+    {
+        // A non-breaking space and a trailing space, as typed in DocuSign's editor.
+        $definition = app(EnvelopeBuilder::class)->buildEnvelopeDefinition(
+            templateId: 'tpl-w9',
+            investor: $investor = $this->investor(),
+            counterSignerEmail: 'dion@example.com',
+            counterSignerName: 'Dion',
+            pricing: app(EnvelopeBuilder::class)->quote($investor),
+            templateRoleNames: ["Counter\u{00A0}Signer", 'investor '],
+        );
+
+        [$investorRole, $counterRole] = $definition->getTemplateRoles();
+        $this->assertSame('investor ', $investorRole->getRoleName());
+        $this->assertSame("Counter\u{00A0}Signer", $counterRole->getRoleName());
+    }
 }
