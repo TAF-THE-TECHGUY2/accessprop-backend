@@ -302,6 +302,7 @@ class TwoFactorAuthenticationTest extends TestCase
             ->assertJsonPath('data.twoFactorEnabled', false);
 
         $this->assertFalse($investor->fresh()->hasTwoFactorEnabled());
+        $this->assertSame(0, $investor->tokens()->count(), 'signed out everywhere');
         $this->assertSame('Two-factor sign-in reset', $investor->fresh()->activities()->latest('occurred_at')->first()->title);
     }
 

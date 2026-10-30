@@ -431,9 +431,9 @@ class InvestorController extends Controller
     }
 
     /**
-     * For an investor who has lost their phone and their recovery codes. Their
-     * next sign-in is password only, and they can set it up again from their
-     * profile. Every remembered device is forgotten with it.
+     * Clears an investor's authenticator (lost phone, new phone, recovery codes
+     * gone). They are signed out everywhere and, at their next sign-in, set it
+     * up again with a new QR code. Every remembered device is forgotten with it.
      */
     public function resetTwoFactor(string $code, TwoFactor $twoFactor): InvestorResource
     {
@@ -441,10 +441,12 @@ class InvestorController extends Controller
 
         if ($investor->hasTwoFactorEnabled() || $investor->two_factor_secret !== null) {
             $twoFactor->disable($investor);
+            // As the console reset does: whoever holds the old phone's session is out too.
+            $investor->tokens()->delete();
             $investor->activities()->create([
                 'code' => InvestorActivity::newCode($investor->code),
                 'title' => 'Two-factor sign-in reset',
-                'description' => 'Admin switched off two-factor sign-in so the investor can set it up again.',
+                'description' => 'Admin cleared the authenticator and signed the investor out; they set it up again at next sign-in.',
                 'occurred_at' => now(),
             ]);
         }
