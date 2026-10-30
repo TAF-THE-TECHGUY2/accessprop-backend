@@ -22,7 +22,8 @@ class DocusignSendTestEnvelope extends Command
                             {--non-us : Test as a non-US person (W-8BEN package)}
                             {--name=Test Investor : Investor name to fill in}
                             {--dry-run : Print the request that would be sent, and send nothing}
-                            {--no-prefill : Send without filling the five priced fields, to isolate a template problem}';
+                            {--no-prefill : Send without filling the five priced fields, to isolate a template problem}
+                            {--draft : Create the envelope as an unsent draft and list the recipients DocuSign gave it}';
 
     protected $description = 'Send a test subscription agreement to addresses you choose, recording nothing';
 
@@ -80,6 +81,60 @@ class DocusignSendTestEnvelope extends Command
         $this->info("Template:        {$templateId}");
         $this->line("Investor signs:  {$email}");
         $this->line("Counter signs:   {$counterName} <{$counterEmail}>");
+
+        if ($this->option('draft')) {
+            $ids = $builder->templateRecipientIds($templateId);
+            $definition = $builder->buildEnvelopeDefinition(
+                templateId: $templateId,
+                investor: $investor,
+                counterSignerEmail: $counterEmail,
+                counterSignerName: $counterName,
+                pricing: null,
+                recipientIds: $ids,
+                templateRoleNames: array_keys($ids),
+                package: $withPricing,
+            );
+            // Unsent: DocuSign only insists on an email for each recipient at
+            // send time, so the draft is created and shows who it contains.
+            $definition->setStatus('created');
+
+            $client = app(\App\Services\DocuSign\Client::class);
+            $created = $client->envelopes()->createEnvelope($client->accountId(), $definition);
+            $envelopeId = $created->getEnvelopeId();
+            $recipients = $client->envelopes()->listRecipients($client->accountId(), $envelopeId);
+
+            $this->line('');
+            $this->info("Draft envelope {$envelopeId} created (not sent). Its recipients:");
+            $kinds = [
+                'signer' => $recipients->getSigners(),
+                'carbon copy' => $recipients->getCarbonCopies(),
+                'certified delivery' => $recipients->getCertifiedDeliveries(),
+                'agent' => $recipients->getAgents(),
+                'editor' => $recipients->getEditors(),
+                'intermediary' => $recipients->getIntermediaries(),
+                'in-person signer' => $recipients->getInPersonSigners(),
+                'witness' => $recipients->getWitnesses(),
+                'notary' => $recipients->getNotaries(),
+                'seal' => $recipients->getSeals(),
+            ];
+            foreach ($kinds as $kind => $list) {
+                foreach ($list ?? [] as $r) {
+                    $this->line(sprintf(
+                        '  - %s: role %s, recipientId=%s, routingOrder=%s, name=%s, email=%s',
+                        $kind,
+                        json_encode($r->getRoleName() ?? '', JSON_UNESCAPED_UNICODE),
+                        $r->getRecipientId(),
+                        $r->getRoutingOrder(),
+                        $r->getName() ?: '(blank)',
+                        method_exists($r, 'getEmail') && $r->getEmail() ? $r->getEmail() : '(blank)',
+                    ));
+                }
+            }
+            $this->line('');
+            $this->line('Delete the draft afterwards: DocuSign > Agreements > Drafts.');
+
+            return self::SUCCESS;
+        }
 
         if ($this->option('dry-run')) {
             $ids = $builder->templateRecipientIds($templateId);
