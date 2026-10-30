@@ -36,6 +36,12 @@ return [
         'counter_signer' => 'Counter Signer',
     ],
 
+    // Fill the Subscription Agreement's priced fields (name, amount, premium,
+    // price per Unit, Units) by Data Label when sending a signing package.
+    // Off until the template's fields carry those labels; while off, nothing
+    // is filled and Units are priced when the money clears, as before.
+    'prefill_fields' => (bool) env('DOCUSIGN_PREFILL_FIELDS', false),
+
     // Who signs first. The fund countersigns first, so the investor receives a
     // package already signed by the company; flip these to reverse it.
     'routing_order' => [

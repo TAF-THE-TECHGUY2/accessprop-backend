@@ -168,4 +168,26 @@ class SubscriptionQuoteTest extends TestCase
         $this->assertSame('investor ', $investorRole->getRoleName());
         $this->assertSame("Counter\u{00A0}Signer", $counterRole->getRoleName());
     }
+
+    public function test_with_prefilling_off_a_package_goes_out_unfilled(): void
+    {
+        $this->assertFalse(config('docusign.prefill_fields'));
+
+        $definition = app(EnvelopeBuilder::class)->buildEnvelopeDefinition(
+            templateId: 'tpl-w9',
+            investor: $this->investor(),
+            counterSignerEmail: 'dion@example.com',
+            counterSignerName: 'Dion',
+            pricing: null,
+            package: true,
+        );
+
+        // Still the template with its roles — not the old page-1 placements.
+        $this->assertSame('tpl-w9', $definition->getTemplateId());
+        $this->assertNull($definition->getCompositeTemplates());
+        [$investorRole, $counterRole] = $definition->getTemplateRoles();
+        $this->assertSame('ada@example.com', $investorRole->getEmail());
+        $this->assertNull($investorRole->getTabs());
+        $this->assertNull($counterRole->getTabs());
+    }
 }

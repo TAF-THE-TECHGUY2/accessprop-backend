@@ -90,9 +90,10 @@ class DocusignSendTestEnvelope extends Command
                 investor: $investor,
                 counterSignerEmail: $counterEmail,
                 counterSignerName: $counterName,
-                pricing: $withPricing ? $builder->quote($investor) : null,
+                pricing: $withPricing && ! $this->option('no-prefill') && config('docusign.prefill_fields') ? $builder->quote($investor) : null,
                 recipientIds: $ids,
                 templateRoleNames: array_keys($ids),
+                package: $withPricing,
             );
             $this->line(json_encode(
                 \DocuSign\eSign\ObjectSerializer::sanitizeForSerialization($definition),

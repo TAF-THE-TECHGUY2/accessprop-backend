@@ -35,7 +35,8 @@ class EnvelopeBuilder
 
         // The signing packages carry the transaction terms, so they are
         // quoted now and kept with the envelope. The old template does not.
-        $pricing = $this->usesTaxPackages() ? $this->quote($investor) : null;
+        $package = $this->usesTaxPackages();
+        $pricing = $package && config('docusign.prefill_fields') ? $this->quote($investor) : null;
 
         $envelopeId = $this->createEnvelope($this->buildEnvelopeDefinition(
             templateId: $templateId,
@@ -45,6 +46,7 @@ class EnvelopeBuilder
             pricing: $pricing,
             recipientIds: $ids = $this->templateRecipientIds($templateId),
             templateRoleNames: array_keys($ids),
+            package: $package,
         ));
 
         return SigningEnvelope::create([
@@ -75,12 +77,11 @@ class EnvelopeBuilder
         bool $withPricing,
         bool $prefill = true,
     ): array {
-        $pricing = $withPricing ? $this->quote($investor) : null;
-
-        // Diagnostic: the same envelope with nothing filled in.
-        if ($pricing !== null && ! $prefill) {
-            $pricing['display'] = [];
-        }
+        // $withPricing marks a signing package; whether its fields are filled
+        // follows the same switch as a real send, unless told not to.
+        $pricing = $withPricing && $prefill && config('docusign.prefill_fields')
+            ? $this->quote($investor)
+            : null;
 
         $envelopeId = $this->createEnvelope($this->buildEnvelopeDefinition(
             templateId: $templateId,
@@ -90,6 +91,7 @@ class EnvelopeBuilder
             pricing: $pricing,
             recipientIds: $ids = $this->templateRecipientIds($templateId),
             templateRoleNames: array_keys($ids),
+            package: $withPricing,
         ));
 
         return ['envelopeId' => $envelopeId, 'pricing' => $pricing];
@@ -252,7 +254,12 @@ class EnvelopeBuilder
         ?array $pricing = null,
         array $recipientIds = [],
         array $templateRoleNames = [],
+        ?bool $package = null,
     ): EnvelopeDefinition {
+        // A signing package (fields placed in the template) is sent as the
+        // template with its roles, filled or not. Defaults to "priced" for
+        // callers that only pass pricing.
+        $package ??= $pricing !== null;
         // The template's own spelling of each role, when it differs from the
         // configured one only by spacing or case. DocuSign matches roles by
         // exact name, and a stray non-breaking space typed into a role name in
@@ -269,7 +276,7 @@ class EnvelopeBuilder
         // The merged (composite) form below matched the old template, but the
         // production W-9 template was refused with "'email' not set for
         // recipient with recipientId 1" even with the template's own IDs.
-        if ($pricing !== null) {
+        if ($package) {
             return (new EnvelopeDefinition())
                 ->setTemplateId($templateId)
                 ->setTemplateRoles([
@@ -278,7 +285,7 @@ class EnvelopeBuilder
                         ->setName($investor->name)
                         ->setEmail($investor->email)
                         ->setRoutingOrder($investorOrder)
-                        ->setTabs($pricing['display'] ? $this->labelledValueTabs($pricing['display']) : null),
+                        ->setTabs($pricing !== null ? $this->labelledValueTabs($pricing['display']) : null),
                     (new TemplateRole())
                         ->setRoleName($counterSignerRoleName)
                         ->setName($counterSignerName)
