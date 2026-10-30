@@ -126,7 +126,7 @@ class EnvelopeStatusHandler
             SigningEnvelope::STATUS_DECLINED => 'declined',
             SigningEnvelope::STATUS_VOIDED => 'voided',
             SigningEnvelope::STATUS_SIGNED_BY_INVESTOR => 'awaiting_countersign',
-            SigningEnvelope::STATUS_DELIVERED, SigningEnvelope::STATUS_SENT => 'awaiting_investor',
+            SigningEnvelope::STATUS_DELIVERED, SigningEnvelope::STATUS_SENT => 'out_for_signature',
             default => $investor->document_signing_status,
         };
 

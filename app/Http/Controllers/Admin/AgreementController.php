@@ -7,6 +7,8 @@ use App\Models\Investor;
 use App\Models\SigningEnvelope;
 use App\Services\DocuSign\Client as DocuSignClient;
 use App\Services\DocuSign\EnvelopeBuilder;
+use App\Services\DocuSign\SigningNotYetOpen;
+use App\Services\DocuSign\SigningPackageMissing;
 use DocuSign\eSign\Model\EnvelopeUpdateSummary;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -41,6 +43,8 @@ class AgreementController extends Controller
 
         try {
             $envelope = $this->builder->sendSubscriptionAgreement($investor);
+        } catch (SigningPackageMissing $e) {
+            return response()->json(['message' => $e->getMessage()], Response::HTTP_UNPROCESSABLE_ENTITY);
         } catch (Throwable $e) {
             Log::error('Failed to send subscription agreement', [
                 'investor_code' => $investor->code,
@@ -53,9 +57,37 @@ class AgreementController extends Controller
             ], Response::HTTP_BAD_GATEWAY);
         }
 
-        $investor->update(['document_signing_status' => 'awaiting_investor']);
+        // Neutral: who signs first is a setting, and the envelope-level events
+        // DocuSign sends do not say which signer is up.
+        $investor->update(['document_signing_status' => 'out_for_signature']);
 
         return response()->json($this->presentEnvelope($envelope), Response::HTTP_CREATED);
+    }
+
+    /**
+     * A fresh one-time signing link for one signer, for an admin to open or
+     * pass on. Valid about five minutes.
+     */
+    public function signingLink(Request $request, int $envelopeId): JsonResponse
+    {
+        $data = $request->validate(['role' => ['required', 'in:investor,counter_signer']]);
+        $envelope = SigningEnvelope::with('investor')->findOrFail($envelopeId);
+
+        if (in_array($envelope->status, [SigningEnvelope::STATUS_COMPLETED, SigningEnvelope::STATUS_VOIDED, SigningEnvelope::STATUS_DECLINED], true)) {
+            return response()->json(['message' => 'This agreement is no longer open for signing.'], Response::HTTP_CONFLICT);
+        }
+
+        $returnUrl = rtrim((string) config('app.frontend_url'), '/').'/admin/investors/'.$envelope->investor?->code.'?signing=returned';
+
+        try {
+            $url = $this->builder->signingUrl($envelope, $data['role'], $returnUrl);
+        } catch (SigningNotYetOpen $e) {
+            return response()->json(['message' => $e->getMessage()], Response::HTTP_CONFLICT);
+        } catch (Throwable $e) {
+            return response()->json(['message' => 'Could not get a signing link.', 'detail' => $e->getMessage()], Response::HTTP_BAD_GATEWAY);
+        }
+
+        return response()->json(['url' => $url, 'expiresInSeconds' => 300]);
     }
 
     public function resend(int $envelopeId): JsonResponse
@@ -168,6 +200,7 @@ class AgreementController extends Controller
     private function presentEnvelope(SigningEnvelope $envelope): array
     {
         return [
+            'embeddedSigning' => (bool) $envelope->embedded_signing,
             'id' => $envelope->id,
             'envelopeId' => $envelope->docusign_envelope_id,
             'type' => $envelope->type,

@@ -25,6 +25,7 @@ class SigningEnvelope extends Model
         'voided_at' => 'datetime',
         'last_event_payload' => 'array',
         'pricing' => 'array',
+        'embedded_signing' => 'boolean',
     ];
 
     public function investor(): BelongsTo

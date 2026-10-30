@@ -18,6 +18,7 @@ use App\Http\Controllers\Admin\ReportsController;
 use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Investor\InvestReadyController;
 use App\Http\Controllers\Investor\InvestorAuthController;
+use App\Http\Controllers\Investor\InvestorPortalAgreementController;
 use App\Http\Controllers\Investor\InvestorFundingController;
 use App\Http\Controllers\Investor\InvestorPasswordResetController;
 use App\Http\Controllers\Investor\InvestorPersonaController;
@@ -102,6 +103,8 @@ Route::prefix('investor')->group(function () {
         Route::get('/portal/holdings/{fundCode}/properties', [InvestorPortalPropertiesController::class, 'index']);
 
         Route::get('/portal/documents', [InvestorPortalDocumentsController::class, 'index']);
+        Route::get('/portal/agreement', [InvestorPortalAgreementController::class, 'show']);
+        Route::post('/portal/agreements/{id}/signing-link', [InvestorPortalAgreementController::class, 'signingLink'])->middleware('throttle:20,1');
         Route::get('/portal/documents/{id}/download', [InvestorPortalDocumentsController::class, 'download']);
         Route::get('/portal/agreements/{id}/download', [InvestorPortalDocumentsController::class, 'downloadSigned']);
 
@@ -210,6 +213,7 @@ Route::prefix('admin')->group(function () {
         Route::get('/investors/{code}/agreements', [AgreementController::class, 'index']);
         Route::post('/investors/{code}/agreements/send', [AgreementController::class, 'send']);
         Route::post('/agreements/{envelopeId}/resend', [AgreementController::class, 'resend']);
+        Route::post('/agreements/{envelopeId}/signing-link', [AgreementController::class, 'signingLink'])->middleware('throttle:30,1');
         Route::post('/agreements/{envelopeId}/void', [AgreementController::class, 'void']);
         Route::get('/agreements/{envelopeId}/download', [AgreementController::class, 'download']);
     });

@@ -13,6 +13,7 @@ use DocuSign\eSign\Model\Recipients;
 use DocuSign\eSign\Model\ServerTemplate;
 use DocuSign\eSign\Model\SignHere;
 use DocuSign\eSign\Model\Signer;
+use DocuSign\eSign\Model\RecipientViewRequest;
 use DocuSign\eSign\Model\Tabs;
 use DocuSign\eSign\Model\TemplateRole;
 use DocuSign\eSign\Model\Text;
@@ -54,6 +55,7 @@ class EnvelopeBuilder
             'docusign_envelope_id' => $envelopeId,
             'template_id' => $templateId,
             'pricing' => $pricing,
+            'embedded_signing' => $package,
             'type' => 'subscription_agreement',
             'status' => SigningEnvelope::STATUS_SENT,
             'investor_email' => $investor->email,
@@ -138,18 +140,28 @@ class EnvelopeBuilder
     }
 
     /**
-     * The W-9 package for a US person, the W-8BEN package otherwise — once
-     * both are configured. Until then, the template by accreditation as
-     * before, for everyone: with only one set, the other group would quietly
-     * get the old package, which carries no tax form at all.
+     * The W-9 package for a US person, the W-8BEN package otherwise. Once
+     * either package is configured they are the only templates used: an
+     * investor whose package is not set up yet is refused with a message
+     * saying so, never sent the old template, which has no tax form. The old
+     * template is used only while neither package exists.
      */
     public function resolveTemplateId(Investor $investor): string
     {
-        $usTemplate = (string) config('docusign.templates.subscription_agreement.us_person');
-        $nonUsTemplate = (string) config('docusign.templates.subscription_agreement.non_us_person');
-
         if ($this->usesTaxPackages()) {
-            return $investor->isUsTaxPerson() ? $usTemplate : $nonUsTemplate;
+            $us = $investor->isUsTaxPerson();
+            $templateId = (string) config('docusign.templates.subscription_agreement.'.($us ? 'us_person' : 'non_us_person'));
+
+            if ($templateId === '') {
+                throw new SigningPackageMissing(sprintf(
+                    'The %s signing package is not set up yet, so this investor (%s) cannot be sent an agreement. Set %s on the server.',
+                    $us ? 'W-9' : 'W-8BEN',
+                    $us ? 'U.S. person' : 'not a U.S. person',
+                    $us ? 'DOCUSIGN_TEMPLATE_ID_US_PERSON' : 'DOCUSIGN_TEMPLATE_ID_NON_US_PERSON',
+                ));
+            }
+
+            return $templateId;
         }
 
         $taxKey = $investor->isUsTaxPerson() ? 'us_person' : 'non_us_person';
@@ -165,11 +177,59 @@ class EnvelopeBuilder
         return $templateId;
     }
 
-    /** Both signing packages configured: they replace the old template. */
+    /** Either signing package configured: the packages replace the old template. */
     public function usesTaxPackages(): bool
     {
         return (string) config('docusign.templates.subscription_agreement.us_person') !== ''
-            && (string) config('docusign.templates.subscription_agreement.non_us_person') !== '';
+            || (string) config('docusign.templates.subscription_agreement.non_us_person') !== '';
+    }
+
+    /** Identifies each signer to DocuSign as signing through the app. */
+    public static function clientUserIdFor(string $role, string $investorCode): string
+    {
+        return $role === 'counter_signer' ? 'counter-signer' : 'investor-'.$investorCode;
+    }
+
+    /**
+     * A one-time signing link for one signer of an envelope, valid about five
+     * minutes. Only for envelopes sent with embedded signing.
+     */
+    public function signingUrl(SigningEnvelope $envelope, string $role, string $returnUrl): string
+    {
+        if (! $envelope->embedded_signing) {
+            throw new RuntimeException('This agreement was sent before signing links existed; the signer must use the DocuSign email.');
+        }
+
+        $investorCode = (string) $envelope->investor?->code;
+        [$email, $name] = $role === 'counter_signer'
+            ? [$envelope->counter_signer_email, $envelope->counter_signer_name]
+            : [$envelope->investor_email, $envelope->investor_name];
+
+        $request = (new RecipientViewRequest())
+            ->setAuthenticationMethod('none')
+            ->setClientUserId(self::clientUserIdFor($role, $investorCode))
+            ->setEmail($email)
+            ->setUserName($name)
+            ->setReturnUrl($returnUrl);
+
+        try {
+            return (string) $this->client->envelopes()
+                ->createRecipientView($this->client->accountId(), $envelope->docusign_envelope_id, $request)
+                ->getUrl();
+        } catch (\DocuSign\eSign\Client\ApiException $e) {
+            $body = $e->getResponseBody();
+            $code = is_object($body) ? ($body->errorCode ?? null) : (is_string($body) && preg_match('/"errorCode"\s*:\s*"([A-Z_]+)"/', $body, $m) ? $m[1] : null);
+
+            // Signing order: the other signer has not finished yet.
+            if ($code === 'RECIPIENT_NOT_IN_SEQUENCE') {
+                throw new SigningNotYetOpen(sprintf(
+                    '%s signs first. This link becomes available once they have signed.',
+                    $role === 'counter_signer' ? $envelope->investor_name : $envelope->counter_signer_name,
+                ));
+            }
+
+            throw $e;
+        }
     }
 
     /**
@@ -284,12 +344,18 @@ class EnvelopeBuilder
                         ->setRoleName($investorRoleName)
                         ->setName($investor->name)
                         ->setEmail($investor->email)
+                        // Signs through the app as well as by email, so a
+                        // link can be generated for them.
+                        ->setClientUserId(self::clientUserIdFor('investor', (string) $investor->code))
+                        ->setEmbeddedRecipientStartUrl('SIGN_AT_DOCUSIGN')
                         ->setRoutingOrder($investorOrder)
                         ->setTabs($pricing !== null ? $this->labelledValueTabs($pricing['display']) : null),
                     (new TemplateRole())
                         ->setRoleName($counterSignerRoleName)
                         ->setName($counterSignerName)
                         ->setEmail($counterSignerEmail)
+                        ->setClientUserId(self::clientUserIdFor('counter_signer', (string) $investor->code))
+                        ->setEmbeddedRecipientStartUrl('SIGN_AT_DOCUSIGN')
                         ->setRoutingOrder($counterSignerOrder),
                 ])
                 ->setEmailSubject('Access Real Estate Fund I — your subscription documents')

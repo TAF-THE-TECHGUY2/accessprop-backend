@@ -104,12 +104,17 @@ class TaxFormSelectionTest extends TestCase
         $this->assertSame('tpl-w9', $this->template('fix@example.com'));
     }
 
-    public function test_with_only_one_new_template_set_everyone_stays_on_the_old_one(): void
+    public function test_with_only_the_w9_package_set_us_investors_get_it_and_others_are_refused_plainly(): void
     {
         config(['docusign.templates.subscription_agreement.non_us_person' => null]);
-        $this->register('half@example.com', 'United States', true)->assertSuccessful();
 
-        $this->assertSame('tpl-legacy', $this->template('half@example.com'));
+        $this->register('us@example.com', 'United States', true)->assertSuccessful();
+        $this->assertSame('tpl-w9', $this->template('us@example.com'));
+
+        $this->register('uk@example.com', 'United Kingdom', false)->assertSuccessful();
+        $this->expectException(\App\Services\DocuSign\SigningPackageMissing::class);
+        $this->expectExceptionMessage('W-8BEN signing package is not set up yet');
+        $this->template('uk@example.com');
     }
 
     public function test_an_admin_is_warned_when_a_sent_agreement_has_the_other_tax_form(): void
