@@ -176,7 +176,10 @@ class DocusignSendTestEnvelope extends Command
 
         $this->line('');
         $this->info("Sent. Envelope {$result['envelopeId']}. Nothing was recorded in the app.");
-        $this->line("Sign as the investor first; {$counterName} gets the countersigning email after.");
+        $counterFirst = (int) config('docusign.routing_order.counter_signer', 1) < (int) config('docusign.routing_order.investor', 2);
+        $this->line($counterFirst
+            ? "{$counterName} signs first; {$email} gets the signing email after."
+            : "{$email} signs first; {$counterName} gets the countersigning email after.");
 
         return self::SUCCESS;
     }
