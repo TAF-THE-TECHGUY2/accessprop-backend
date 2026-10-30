@@ -14,6 +14,7 @@ use DocuSign\eSign\Model\ServerTemplate;
 use DocuSign\eSign\Model\SignHere;
 use DocuSign\eSign\Model\Signer;
 use DocuSign\eSign\Model\Tabs;
+use DocuSign\eSign\Model\TemplateRole;
 use DocuSign\eSign\Model\Text;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -245,6 +246,33 @@ class EnvelopeBuilder
     ): EnvelopeDefinition {
         $investorRoleName = (string) config('docusign.roles.investor');
         $counterSignerRoleName = (string) config('docusign.roles.counter_signer');
+
+        // The signing packages are sent as the template with its roles filled
+        // in, DocuSign's plain form for one template: roles are matched by
+        // name, fields by Data Label, and signing order is the template's own.
+        // The merged (composite) form below matched the old template, but the
+        // production W-9 template was refused with "'email' not set for
+        // recipient with recipientId 1" even with the template's own IDs.
+        if ($pricing !== null) {
+            return (new EnvelopeDefinition())
+                ->setTemplateId($templateId)
+                ->setTemplateRoles([
+                    (new TemplateRole())
+                        ->setRoleName($investorRoleName)
+                        ->setName($investor->name)
+                        ->setEmail($investor->email)
+                        ->setRoutingOrder('1')
+                        ->setTabs($this->labelledValueTabs($pricing['display'])),
+                    (new TemplateRole())
+                        ->setRoleName($counterSignerRoleName)
+                        ->setName($counterSignerName)
+                        ->setEmail($counterSignerEmail)
+                        ->setRoutingOrder('2'),
+                ])
+                ->setEmailSubject('Access Real Estate Fund I — your subscription documents')
+                ->setEmailBlurb("Hi {$investor->name},\n\nYour subscription documents for Access Real Estate Fund I are ready to sign. Please review and sign at your earliest convenience.\n\nIf you have any questions, reply to this email.\n\nThank you,\nAccess Properties")
+                ->setStatus('sent');
+        }
 
         $investorSigner = (new Signer())
             ->setEmail($investor->email)

@@ -92,7 +92,7 @@ class SubscriptionQuoteTest extends TestCase
         $this->assertSame('2026-09-30', $quote['base_nav_as_of']);
     }
 
-    public function test_the_packages_are_filled_by_label_with_nothing_placed_by_position(): void
+    public function test_the_packages_are_sent_as_the_template_with_its_roles_filled(): void
     {
         $definition = app(EnvelopeBuilder::class)->buildEnvelopeDefinition(
             templateId: 'tpl-w9',
@@ -102,22 +102,31 @@ class SubscriptionQuoteTest extends TestCase
             pricing: app(EnvelopeBuilder::class)->quote($investor),
         );
 
-        $signers = $definition->getCompositeTemplates()[0]->getInlineTemplates()[0]->getRecipients()->getSigners();
-        $investorTabs = $signers[0]->getTabs();
+        $this->assertSame('tpl-w9', $definition->getTemplateId());
+        $this->assertNull($definition->getCompositeTemplates());
 
-        $labels = array_map(fn ($t) => $t->getTabLabel(), $investorTabs->getTextTabs());
+        [$investorRole, $counterRole] = $definition->getTemplateRoles();
+
+        // Matched to the template's roles by name; no recipient IDs involved.
+        $this->assertSame('Investor', $investorRole->getRoleName());
+        $this->assertSame('ada@example.com', $investorRole->getEmail());
+        $this->assertSame('1', $investorRole->getRoutingOrder());
+        $this->assertSame('Counter Signer', $counterRole->getRoleName());
+        $this->assertSame('dion@example.com', $counterRole->getEmail());
+        $this->assertSame('2', $counterRole->getRoutingOrder());
+
+        // Fields filled by Data Label only; nothing positioned, no signatures.
+        $tabs = $investorRole->getTabs();
         $this->assertSame(
             ['investor_full_name', 'total_purchase_price', 'subscription_premium_pct', 'price_per_unit', 'units'],
-            $labels,
+            array_map(fn ($t) => $t->getTabLabel(), $tabs->getTextTabs()),
         );
-        foreach ($investorTabs->getTextTabs() as $tab) {
+        foreach ($tabs->getTextTabs() as $tab) {
             $this->assertNull($tab->getXPosition());
             $this->assertNull($tab->getPageNumber());
         }
-        $this->assertNull($investorTabs->getSignHereTabs());
-        $this->assertNull($signers[1]->getTabs());
-        $this->assertSame('1', $signers[0]->getRoutingOrder());
-        $this->assertSame('2', $signers[1]->getRoutingOrder());
+        $this->assertNull($tabs->getSignHereTabs());
+        $this->assertNull($counterRole->getTabs());
     }
 
     public function test_the_old_template_still_gets_its_placed_fields(): void
@@ -140,29 +149,5 @@ class SubscriptionQuoteTest extends TestCase
 
         $this->expectExceptionMessage('no published Base NAV');
         app(EnvelopeBuilder::class)->quote($this->investor());
-    }
-
-    public function test_signers_take_the_template_s_own_recipient_ids(): void
-    {
-        // Roles added Counter Signer first, as in the production W-9 template.
-        $definition = app(EnvelopeBuilder::class)->buildEnvelopeDefinition(
-            templateId: 'tpl-w9',
-            investor: $investor = $this->investor(),
-            counterSignerEmail: 'dion@example.com',
-            counterSignerName: 'Dion',
-            pricing: app(EnvelopeBuilder::class)->quote($investor),
-            recipientIds: ['Counter Signer' => '1', 'Investor' => '2'],
-        );
-
-        [$investorSigner, $counterSigner] = $definition->getCompositeTemplates()[0]
-            ->getInlineTemplates()[0]->getRecipients()->getSigners();
-
-        $this->assertSame('2', $investorSigner->getRecipientId());
-        $this->assertSame('ada@example.com', $investorSigner->getEmail());
-        $this->assertSame('1', $counterSigner->getRecipientId());
-        $this->assertSame('dion@example.com', $counterSigner->getEmail());
-        // Signing order is still Investor first, whatever the IDs.
-        $this->assertSame('1', $investorSigner->getRoutingOrder());
-        $this->assertSame('2', $counterSigner->getRoutingOrder());
     }
 }
