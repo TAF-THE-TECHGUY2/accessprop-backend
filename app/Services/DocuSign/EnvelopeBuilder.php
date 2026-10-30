@@ -2,6 +2,7 @@
 
 namespace App\Services\DocuSign;
 
+use App\Models\Fund;
 use App\Models\Investor;
 use App\Models\SigningEnvelope;
 use DocuSign\eSign\Model\CompositeTemplate;
@@ -31,11 +32,16 @@ class EnvelopeBuilder
             throw new RuntimeException('DOCUSIGN_DEFAULT_COUNTER_SIGNER_EMAIL is not configured.');
         }
 
+        // The signing packages carry the transaction terms, so they are
+        // quoted now and kept with the envelope. The old template does not.
+        $pricing = $this->usesTaxPackages() ? $this->quote($investor) : null;
+
         $envelopeDefinition = $this->buildEnvelopeDefinition(
             templateId: $templateId,
             investor: $investor,
             counterSignerEmail: $counterSignerEmail,
             counterSignerName: $counterSignerName,
+            pricing: $pricing,
         );
 
         $created = $this->client->envelopes()->createEnvelope(
@@ -53,6 +59,7 @@ class EnvelopeBuilder
             'investor_id' => $investor->id,
             'docusign_envelope_id' => $envelopeId,
             'template_id' => $templateId,
+            'pricing' => $pricing,
             'type' => 'subscription_agreement',
             'status' => SigningEnvelope::STATUS_SENT,
             'investor_email' => $investor->email,
@@ -74,7 +81,7 @@ class EnvelopeBuilder
         $usTemplate = (string) config('docusign.templates.subscription_agreement.us_person');
         $nonUsTemplate = (string) config('docusign.templates.subscription_agreement.non_us_person');
 
-        if ($usTemplate !== '' && $nonUsTemplate !== '') {
+        if ($this->usesTaxPackages()) {
             return $investor->isUsTaxPerson() ? $usTemplate : $nonUsTemplate;
         }
 
@@ -91,11 +98,92 @@ class EnvelopeBuilder
         return $templateId;
     }
 
-    private function buildEnvelopeDefinition(
+    /** Both signing packages configured: they replace the old template. */
+    public function usesTaxPackages(): bool
+    {
+        return (string) config('docusign.templates.subscription_agreement.us_person') !== ''
+            && (string) config('docusign.templates.subscription_agreement.non_us_person') !== '';
+    }
+
+    /**
+     * The transaction terms for the Subscription Agreement, per the Valuation
+     * and Unit Pricing Policy:
+     *
+     *   price per Unit = Base NAV × (1 + premium)
+     *   Units          = capital contribution ÷ price per Unit
+     *
+     * on the latest published Base NAV, unrounded. Rounded only for display:
+     * 4 decimal places, as the policy's own illustration shows them.
+     *
+     * @return array{amount: float, base_nav: string, base_nav_as_of: string, premium_pct: float, price_per_unit: float, units: float, display: array<string, string>}
+     */
+    public function quote(Investor $investor): array
+    {
+        $fund = $investor->fund_id ? Fund::find($investor->fund_id) : null;
+
+        if (! $fund) {
+            throw new RuntimeException("Investor {$investor->code} has no fund; cannot price the subscription.");
+        }
+
+        $nav = $fund->bookValueAsOf(now());
+
+        if (! $nav || (float) $nav->price <= 0) {
+            throw new RuntimeException("Fund {$fund->code} has no published Base NAV; cannot price the subscription.");
+        }
+
+        $amount = (float) ($investor->investment_commitment ?: $investor->investment_amount);
+
+        if ($amount <= 0) {
+            throw new RuntimeException("Investor {$investor->code} has no investment amount; cannot price the subscription.");
+        }
+
+        $baseNav = (float) $nav->price;
+        $premiumPct = (float) $fund->current_premium_pct;
+        $pricePerUnit = $baseNav * (1 + $premiumPct / 100);
+        $units = $amount / $pricePerUnit;
+
+        return [
+            'amount' => round($amount, 2),
+            'base_nav' => (string) $nav->price,
+            'base_nav_as_of' => $nav->as_of_date->toDateString(),
+            'premium_pct' => $premiumPct,
+            'price_per_unit' => round($pricePerUnit, 8),
+            'units' => round($units, 6),
+            // The PDF prints the $ and % beside each blank, so values only.
+            'display' => [
+                'investor_full_name' => (string) $investor->name,
+                'total_purchase_price' => number_format($amount, 2),
+                'subscription_premium_pct' => number_format($premiumPct, 2),
+                'price_per_unit' => number_format($pricePerUnit, 4),
+                'units' => number_format($units, 4),
+            ],
+        ];
+    }
+
+    /**
+     * Values for fields already placed in the template, matched by Data Label.
+     * No position: DocuSign fills the template's own field of that label.
+     */
+    private function labelledValueTabs(array $values): Tabs
+    {
+        $text = [];
+
+        foreach ($values as $label => $value) {
+            $text[] = (new Text())
+                ->setTabLabel($label)
+                ->setValue((string) $value)
+                ->setLocked('true');
+        }
+
+        return (new Tabs())->setTextTabs($text);
+    }
+
+    public function buildEnvelopeDefinition(
         string $templateId,
         Investor $investor,
         string $counterSignerEmail,
         string $counterSignerName,
+        ?array $pricing = null,
     ): EnvelopeDefinition {
         $investorRoleName = (string) config('docusign.roles.investor');
         $counterSignerRoleName = (string) config('docusign.roles.counter_signer');
@@ -107,15 +195,23 @@ class EnvelopeBuilder
             ->setRecipientId('1')
             ->setRoutingOrder('1')
             ->setClientUserId(null)
-            ->setTabs($this->buildTabs('investor', $investor));
+            // The signing packages have every field placed in the template;
+            // the app only fills the labelled ones. The old template had none,
+            // so the app placed them on page 1.
+            ->setTabs($pricing !== null
+                ? $this->labelledValueTabs($pricing['display'])
+                : $this->buildTabs('investor', $investor));
 
         $counterSigner = (new Signer())
             ->setEmail($counterSignerEmail)
             ->setName($counterSignerName)
             ->setRoleName($counterSignerRoleName)
             ->setRecipientId('2')
-            ->setRoutingOrder('2')
-            ->setTabs($this->buildTabs('counter_signer', $investor));
+            ->setRoutingOrder('2');
+
+        if ($pricing === null) {
+            $counterSigner->setTabs($this->buildTabs('counter_signer', $investor));
+        }
 
         $compositeTemplate = (new CompositeTemplate())
             ->setCompositeTemplateId('1')
@@ -131,7 +227,9 @@ class EnvelopeBuilder
             ]);
 
         return (new EnvelopeDefinition())
-            ->setEmailSubject('Access Properties — Membership Interest Purchase Agreement')
+            ->setEmailSubject($pricing !== null
+                ? 'Access Real Estate Fund I — your subscription documents'
+                : 'Access Properties — Membership Interest Purchase Agreement')
             ->setEmailBlurb("Hi {$investor->name},\n\nYour subscription agreement for Access Properties is ready for signing. Please review and sign at your earliest convenience.\n\nIf you have any questions, reply to this email.\n\nThank you,\nAccess Properties")
             ->setCompositeTemplates([$compositeTemplate])
             ->setStatus('sent');
