@@ -94,6 +94,22 @@ class AgreementController extends Controller
     {
         $envelope = SigningEnvelope::findOrFail($envelopeId);
 
+        // Signers the app emails itself: resend the app's email, since
+        // DocuSign sends them nothing.
+        if ($envelope->embedded_signing) {
+            try {
+                $role = app(\App\Services\DocuSign\AgreementNotifier::class)->resend($envelope);
+            } catch (Throwable $e) {
+                return response()->json(['message' => 'Failed to resend.', 'detail' => $e->getMessage()], Response::HTTP_BAD_GATEWAY);
+            }
+
+            return response()->json([
+                'message' => $role === null
+                    ? 'Nobody is waiting to sign.'
+                    : 'Signing email resent to the '.($role === 'counter_signer' ? 'counter signer' : 'investor').'.',
+            ]);
+        }
+
         try {
             $update = (new EnvelopeUpdateSummary())->setEnvelopeId($envelope->docusign_envelope_id);
 

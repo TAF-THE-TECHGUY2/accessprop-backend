@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Mail\AgreementCompletedMail;
+use App\Mail\AgreementSignRequestMail;
 use App\Mail\InvestorPasswordResetMail;
 use App\Mail\InvestorWelcomeMail;
 use App\Models\EmailLog;
@@ -232,6 +234,7 @@ class EmailTemplateController extends Controller
                 $investor,
                 rtrim(config('app.frontend_url', 'https://investor.ap.boston'), '/').'/reset-password?token=sample-token',
             ),
+            'agreement_countersign_request', 'agreement_sign_request', 'agreement_completed' => $this->sampleAgreementMail($key),
             default => null,
         };
 
@@ -273,6 +276,9 @@ class EmailTemplateController extends Controller
         $views = match ($key) {
             'investor_welcome' => ['investor-welcome', 'investor-welcome-text', InvestorWelcomeMail::DEFAULT_SUBJECT],
             'investor_password_reset' => ['investor-password-reset', 'investor-password-reset-text', InvestorPasswordResetMail::DEFAULT_SUBJECT],
+            'agreement_countersign_request' => [AgreementSignRequestMail::VIEWS['counter_signer'], AgreementSignRequestMail::VIEWS['counter_signer'].'-text', AgreementSignRequestMail::DEFAULT_SUBJECTS['counter_signer']],
+            'agreement_sign_request' => [AgreementSignRequestMail::VIEWS['investor'], AgreementSignRequestMail::VIEWS['investor'].'-text', AgreementSignRequestMail::DEFAULT_SUBJECTS['investor']],
+            'agreement_completed' => ['agreement-completed', 'agreement-completed-text', AgreementCompletedMail::DEFAULT_SUBJECT],
             default => null,
         };
 
@@ -339,8 +345,25 @@ class EmailTemplateController extends Controller
                 $investor,
                 'https://investor.ap.boston/reset-password?token=sample-token',
             ))->templateData(),
+            'agreement_countersign_request', 'agreement_sign_request', 'agreement_completed' => $this->sampleAgreementMail($key)->templateData(),
             default => (new InvestorWelcomeMail($investor))->templateData(),
         };
+    }
+
+    /** Sample signing emails; the link goes nowhere real. */
+    private function sampleAgreementMail(string $key): AgreementSignRequestMail|AgreementCompletedMail
+    {
+        $base = rtrim(config('app.frontend_url', 'https://investor.ap.boston'), '/');
+        $investor = $this->sampleInvestor();
+
+        if ($key === 'agreement_completed') {
+            return new AgreementCompletedMail($investor->name, 'Access Real Estate Fund I', $base.'/login');
+        }
+
+        $role = $key === 'agreement_countersign_request' ? 'counter_signer' : 'investor';
+        $signer = $role === 'counter_signer' ? (string) (config('docusign.counter_signer.name') ?: 'Counter Signer') : $investor->name;
+
+        return new AgreementSignRequestMail($role, $signer, $investor->name, 'Access Real Estate Fund I', $base.'/sign/sample-link');
     }
 
     private function bladeSource(string $name): string

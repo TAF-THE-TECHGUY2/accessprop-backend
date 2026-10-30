@@ -31,6 +31,7 @@ use App\Http\Controllers\Investor\InvestorPortalProfileController;
 use App\Http\Controllers\Investor\InvestorPortalPropertiesController;
 use App\Http\Controllers\Public\InvestorRegistrationController;
 use App\Http\Controllers\Public\PublicSettingsController;
+use App\Http\Controllers\Public\SigningLinkController;
 use App\Http\Controllers\TwoFactorController;
 use App\Http\Controllers\Webhooks\DocuSignWebhookController;
 use App\Http\Controllers\Webhooks\InvestReadyWebhookController;
@@ -47,6 +48,11 @@ Route::prefix('investors')->middleware('throttle:10,1')->group(function () {
 // cached from before the rename keeps working; it can go once one has expired.
 Route::get('/public-settings', PublicSettingsController::class)->middleware('throttle:60,1');
 Route::get('/legal-links', PublicSettingsController::class)->middleware('throttle:60,1');
+
+// The link in the app's signing emails: no sign-in, the token is the key.
+Route::get('/sign/{token}', [SigningLinkController::class, 'open'])
+    ->where('token', '[A-Za-z0-9]{64}')
+    ->middleware('throttle:30,1');
 
 Route::post('/webhooks/persona', PersonaWebhookController::class);
 Route::post('/webhooks/docusign', DocuSignWebhookController::class);

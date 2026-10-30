@@ -13,7 +13,17 @@ class EmailTemplateSeeder extends Seeder
      */
     public function run(): void
     {
+        $this->seed();
+    }
+
+    /** @param  array<int, string>|null  $only  just these keys; null for all */
+    public function seed(?array $only = null): void
+    {
         foreach ($this->templates() as $definition) {
+            if ($only !== null && ! in_array($definition['key'], $only, true)) {
+                continue;
+            }
+
             if (EmailTemplate::where('key', $definition['key'])->exists()) {
                 continue;
             }
@@ -50,6 +60,50 @@ class EmailTemplateSeeder extends Seeder
                     ['name' => 'firstName', 'description' => "Investor's first name", 'required' => true],
                     ['name' => 'resetUrl', 'description' => 'One-time password reset link', 'required' => true],
                     ['name' => 'investor', 'description' => 'Full investor record — use $investor->email', 'required' => false],
+                ],
+                'is_active' => true,
+            ],
+            [
+                'key' => 'agreement_countersign_request',
+                'name' => 'Agreement: countersign request',
+                'description' => "Sent to the counter signer when a subscription agreement is ready, with a signing link (no sign-in). Reminders reuse it with \"Reminder:\" before the subject.",
+                'subject' => 'Subscription agreement ready for countersignature — {{ $investorName }}',
+                'body_html' => $this->view('agreement-countersign-request'),
+                'body_text' => $this->view('agreement-countersign-request-text'),
+                'variables' => [
+                    ['name' => 'firstName', 'description' => "Counter signer's first name", 'required' => false],
+                    ['name' => 'investorName', 'description' => "The investor's full name", 'required' => false],
+                    ['name' => 'fundName', 'description' => 'Fund the investor is subscribing to', 'required' => false],
+                    ['name' => 'signUrl', 'description' => 'Signing link (opens DocuSign, no sign-in)', 'required' => true],
+                ],
+                'is_active' => true,
+            ],
+            [
+                'key' => 'agreement_sign_request',
+                'name' => 'Agreement: investor sign request',
+                'description' => "Sent to the investor once their documents are countersigned and ready, with a signing link (no sign-in). Reminders reuse it with \"Reminder:\" before the subject.",
+                'subject' => 'Your subscription documents are ready to sign',
+                'body_html' => $this->view('agreement-sign-request'),
+                'body_text' => $this->view('agreement-sign-request-text'),
+                'variables' => [
+                    ['name' => 'firstName', 'description' => "Investor's first name", 'required' => false],
+                    ['name' => 'investorName', 'description' => "The investor's full name", 'required' => false],
+                    ['name' => 'fundName', 'description' => 'Fund the investor is subscribing to', 'required' => false],
+                    ['name' => 'signUrl', 'description' => 'Signing link (opens DocuSign, no sign-in)', 'required' => true],
+                ],
+                'is_active' => true,
+            ],
+            [
+                'key' => 'agreement_completed',
+                'name' => 'Agreement: fully signed',
+                'description' => 'Sent to the investor once everyone has signed.',
+                'subject' => 'Your subscription documents are signed',
+                'body_html' => $this->view('agreement-completed'),
+                'body_text' => $this->view('agreement-completed-text'),
+                'variables' => [
+                    ['name' => 'firstName', 'description' => "Investor's first name", 'required' => false],
+                    ['name' => 'fundName', 'description' => 'Fund the investor is subscribing to', 'required' => false],
+                    ['name' => 'portalUrl', 'description' => 'Investor portal sign-in page', 'required' => false],
                 ],
                 'is_active' => true,
             ],

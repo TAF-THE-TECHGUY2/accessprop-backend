@@ -42,6 +42,13 @@ return [
     // is filled and Units are priced when the money clears, as before.
     'prefill_fields' => (bool) env('DOCUSIGN_PREFILL_FIELDS', false),
 
+    // The app's own signing emails: a reminder to whoever's turn it is every
+    // `every_days`, at most `max` times.
+    'reminders' => [
+        'every_days' => (int) env('DOCUSIGN_REMINDER_EVERY_DAYS', 3),
+        'max' => (int) env('DOCUSIGN_REMINDER_MAX', 3),
+    ],
+
     // Who signs first. The fund countersigns first, so the investor receives a
     // package already signed by the company; flip these to reverse it.
     'routing_order' => [

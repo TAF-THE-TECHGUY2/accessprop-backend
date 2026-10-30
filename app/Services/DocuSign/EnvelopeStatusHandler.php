@@ -12,7 +12,7 @@ class EnvelopeStatusHandler
      * status strings like 'sent', 'delivered', 'completed', 'declined', 'voided'.
      * We map them onto our internal lifecycle and dispatch downstream work.
      */
-    public function handle(array $payload): void
+    public function handle(array $payload, bool $followUp = true): void
     {
         $envelopeId = $this->extractEnvelopeId($payload);
         $newStatus = $this->extractStatus($payload);
@@ -72,6 +72,19 @@ class EnvelopeStatusHandler
 
         if ($envelope->status === SigningEnvelope::STATUS_COMPLETED && ! $envelope->signed_document_path) {
             DownloadCompletedDocumentJob::dispatch($envelope->id);
+        }
+
+        // A signer finishing is the moment to email the next one. Never fatal:
+        // the hourly follow-up catches anything missed here.
+        if ($followUp) {
+            try {
+                app(AgreementNotifier::class)->followUp($envelope->fresh());
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('Agreement follow-up after webhook failed', [
+                    'envelope' => $envelope->docusign_envelope_id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
         }
     }
 

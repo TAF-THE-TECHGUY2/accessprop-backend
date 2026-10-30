@@ -23,10 +23,16 @@ class SigningEnvelope extends Model
         'signed_at' => 'datetime',
         'completed_at' => 'datetime',
         'voided_at' => 'datetime',
+        'completion_emailed_at' => 'datetime',
         'last_event_payload' => 'array',
         'pricing' => 'array',
         'embedded_signing' => 'boolean',
     ];
+
+    public function links(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(SigningLink::class);
+    }
 
     public function investor(): BelongsTo
     {

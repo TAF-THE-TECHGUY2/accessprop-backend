@@ -10,3 +10,6 @@ Artisan::command('inspire', function () {
 
 // Expired tokens are already refused; this only clears the rows.
 Schedule::command('sanctum:prune-expired --hours=24')->daily();
+
+// The app's own DocuSign emails: the next signer, reminders, completion.
+Schedule::command('agreements:follow-up')->hourly()->withoutOverlapping();

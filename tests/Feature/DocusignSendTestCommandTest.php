@@ -40,12 +40,20 @@ class DocusignSendTestCommandTest extends TestCase
                 && ! $investor->exists
                 && $withPricing === true)
             ->andReturnUsing(fn ($investor) => ['envelopeId' => 'env-test', 'pricing' => (new EnvelopeBuilder(app(\App\Services\DocuSign\Client::class)))->quote($investor)]);
+        // DocuSign emails nobody in a signing package, so the links are printed.
+        $builder->shouldReceive('signingUrl')
+            ->once()
+            ->withArgs(fn ($envelope, $role) => $role === 'counter_signer' && $envelope->docusign_envelope_id === 'env-test' && ! $envelope->exists)
+            ->andReturn('https://docusign.test/sign/dion');
         $this->app->instance(EnvelopeBuilder::class, $builder);
 
         $this->artisan('docusign:send-test', [
             '--email' => 'me@example.com',
             '--template' => 'tpl-w9',
-        ])->expectsOutputToContain('709.4925')->assertSuccessful();
+        ])->expectsOutputToContain('709.4925')
+            ->expectsOutputToContain('https://docusign.test/sign/dion')
+            ->expectsOutputToContain('--link=env-test --as=investor')
+            ->assertSuccessful();
 
         $this->assertSame(0, Investor::count());
         $this->assertSame(0, SigningEnvelope::count());

@@ -59,7 +59,7 @@ class InvestorWelcomeEmailTest extends TestCase
     {
         $this->runReplacementMigration();
 
-        $this->assertDatabaseCount('email_templates', 0);
+        $this->assertDatabaseMissing('email_templates', ['key' => 'investor_welcome']);
         $this->assertStringContainsString(
             'thank you for creating your investor account',
             $this->renderWelcomeEmail(),

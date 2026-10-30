@@ -4,7 +4,9 @@ namespace App\Console\Commands;
 
 use App\Models\Fund;
 use App\Models\Investor;
+use App\Models\SigningEnvelope;
 use App\Services\DocuSign\EnvelopeBuilder;
+use App\Services\DocuSign\SigningNotYetOpen;
 use Illuminate\Console\Command;
 
 /**
@@ -12,6 +14,10 @@ use Illuminate\Console\Command;
  * held in memory and no envelope is recorded, so nothing appears in the admin
  * and signing it changes nothing in the app. The investor is an address you
  * choose; the counter signer is always the configured one, as for a real send.
+ *
+ * DocuSign sends signing-package signers no email (the app does, for real
+ * agreements), so a test prints the signing links instead. Each one lasts about
+ * five minutes; fetch the investor's with --link once the counter signer is done.
  */
 class DocusignSendTestEnvelope extends Command
 {
@@ -23,7 +29,9 @@ class DocusignSendTestEnvelope extends Command
                             {--name=Test Investor : Investor name to fill in}
                             {--dry-run : Print the request that would be sent, and send nothing}
                             {--no-prefill : Send without filling the five priced fields, to isolate a template problem}
-                            {--draft : Create the envelope as an unsent draft and list the recipients DocuSign gave it}';
+                            {--draft : Create the envelope as an unsent draft and list the recipients DocuSign gave it}
+                            {--link= : Print a fresh signing link for a test envelope already sent (give its envelope ID)}
+                            {--as=investor : With --link: investor or counter_signer}';
 
     protected $description = 'Send a test subscription agreement to addresses you choose, recording nothing';
 
@@ -54,6 +62,7 @@ class DocusignSendTestEnvelope extends Command
 
         $amount = (float) $this->option('amount');
         $usPerson = ! $this->option('non-us');
+        $counterFirst = (int) config('docusign.routing_order.counter_signer', 1) < (int) config('docusign.routing_order.investor', 2);
 
         // In memory only: never saved.
         $investor = new Investor([
@@ -72,6 +81,17 @@ class DocusignSendTestEnvelope extends Command
             'address_postal_code' => '02108',
             'address_country' => $usPerson ? 'United States' : 'United Kingdom',
         ]);
+
+        if ($envelopeId = $this->option('link')) {
+            $role = (string) $this->option('as');
+            if (! in_array($role, ['investor', 'counter_signer'], true)) {
+                $this->error('--as must be investor or counter_signer.');
+
+                return self::FAILURE;
+            }
+
+            return $this->printLink($builder, $this->testEnvelope($envelopeId, $investor, $counterEmail, $counterName), $role);
+        }
 
         $templateId = (string) ($this->option('template') ?: $builder->resolveTemplateId($investor));
         // A template named outright is one of the new packages under test, so
@@ -176,10 +196,61 @@ class DocusignSendTestEnvelope extends Command
 
         $this->line('');
         $this->info("Sent. Envelope {$result['envelopeId']}. Nothing was recorded in the app.");
-        $counterFirst = (int) config('docusign.routing_order.counter_signer', 1) < (int) config('docusign.routing_order.investor', 2);
-        $this->line($counterFirst
-            ? "{$counterName} signs first; {$email} gets the signing email after."
-            : "{$email} signs first; {$counterName} gets the countersigning email after.");
+
+        if (! $withPricing) {
+            $this->line($counterFirst
+                ? "{$counterName} signs first; {$email} gets the signing email after."
+                : "{$email} signs first; {$counterName} gets the countersigning email after.");
+
+            return self::SUCCESS;
+        }
+
+        // A signing package: DocuSign emails nobody, so hand over the links.
+        $first = $counterFirst ? 'counter_signer' : 'investor';
+        $second = $counterFirst ? 'investor' : 'counter_signer';
+        $this->printLink($builder, $this->testEnvelope($result['envelopeId'], $investor, $counterEmail, $counterName), $first);
+        $this->line('');
+        $this->line('When that is signed, get the other signer\'s link with:');
+        $this->line(sprintf(
+            '  php artisan docusign:send-test --email=%s --name=%s --link=%s --as=%s',
+            escapeshellarg($email), escapeshellarg((string) $this->option('name')), $result['envelopeId'], $second,
+        ));
+
+        return self::SUCCESS;
+    }
+
+    /** An unsaved envelope record, enough to ask DocuSign for a signing link. */
+    private function testEnvelope(string $envelopeId, Investor $investor, string $counterEmail, string $counterName): SigningEnvelope
+    {
+        $envelope = new SigningEnvelope([
+            'docusign_envelope_id' => $envelopeId,
+            'investor_email' => $investor->email,
+            'investor_name' => $investor->name,
+            'counter_signer_email' => $counterEmail,
+            'counter_signer_name' => $counterName,
+        ]);
+        $envelope->embedded_signing = true;
+        $envelope->setRelation('investor', $investor);
+
+        return $envelope;
+    }
+
+    private function printLink(EnvelopeBuilder $builder, SigningEnvelope $envelope, string $role): int
+    {
+        $who = $role === 'counter_signer' ? $envelope->counter_signer_name : $envelope->investor_name;
+        $returnUrl = rtrim((string) config('app.frontend_url'), '/').'/signing/complete';
+
+        try {
+            $url = $builder->signingUrl($envelope, $role, $returnUrl);
+        } catch (SigningNotYetOpen $e) {
+            $this->warn($e->getMessage());
+
+            return self::FAILURE;
+        }
+
+        $this->line('');
+        $this->info("Signing link for {$who} (open within 5 minutes, once):");
+        $this->line($url);
 
         return self::SUCCESS;
     }

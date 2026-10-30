@@ -50,7 +50,7 @@ class EnvelopeBuilder
             package: $package,
         ));
 
-        return SigningEnvelope::create([
+        $envelope = SigningEnvelope::create([
             'investor_id' => $investor->id,
             'docusign_envelope_id' => $envelopeId,
             'template_id' => $templateId,
@@ -64,6 +64,21 @@ class EnvelopeBuilder
             'counter_signer_name' => $counterSignerName,
             'sent_at' => now(),
         ]);
+
+        // DocuSign sends nothing for these; email the first signer now.
+        // Never fatal: the envelope exists, and the hourly follow-up retries.
+        if ($package) {
+            try {
+                app(AgreementNotifier::class)->followUp($envelope);
+            } catch (\Throwable $e) {
+                \Illuminate\Support\Facades\Log::warning('First signing email failed; the follow-up will retry', [
+                    'envelope' => $envelopeId,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        return $envelope;
     }
 
     /**
@@ -344,10 +359,9 @@ class EnvelopeBuilder
                         ->setRoleName($investorRoleName)
                         ->setName($investor->name)
                         ->setEmail($investor->email)
-                        // Signs through the app as well as by email, so a
-                        // link can be generated for them.
+                        // Signs through the app only: DocuSign sends no email to
+                        // a signer with a client user ID; the app emails them.
                         ->setClientUserId(self::clientUserIdFor('investor', (string) $investor->code))
-                        ->setEmbeddedRecipientStartUrl('SIGN_AT_DOCUSIGN')
                         ->setRoutingOrder($investorOrder)
                         ->setTabs($pricing !== null ? $this->labelledValueTabs($pricing['display']) : null),
                     (new TemplateRole())
@@ -355,7 +369,6 @@ class EnvelopeBuilder
                         ->setName($counterSignerName)
                         ->setEmail($counterSignerEmail)
                         ->setClientUserId(self::clientUserIdFor('counter_signer', (string) $investor->code))
-                        ->setEmbeddedRecipientStartUrl('SIGN_AT_DOCUSIGN')
                         ->setRoutingOrder($counterSignerOrder),
                 ])
                 ->setEmailSubject('Access Real Estate Fund I — your subscription documents')

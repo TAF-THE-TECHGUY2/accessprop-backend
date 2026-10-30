@@ -134,8 +134,8 @@ class SigningLinksTest extends TestCase
         [$investorRole, $counterRole] = $definition->getTemplateRoles();
         $this->assertSame('investor-inv-8106', $investorRole->getClientUserId());
         $this->assertSame('counter-signer', $counterRole->getClientUserId());
-        // Still emailed by DocuSign as well.
-        $this->assertSame('SIGN_AT_DOCUSIGN', $investorRole->getEmbeddedRecipientStartUrl());
-        $this->assertSame('SIGN_AT_DOCUSIGN', $counterRole->getEmbeddedRecipientStartUrl());
+        // DocuSign emails neither of them; the app does.
+        $this->assertNull($investorRole->getEmbeddedRecipientStartUrl());
+        $this->assertNull($counterRole->getEmbeddedRecipientStartUrl());
     }
 }
