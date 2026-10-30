@@ -28,6 +28,38 @@ class DocusignInspectTemplate extends Command
         $this->line("ID: {$tpl->getTemplateId()}");
         $this->line('');
 
+        // Every recipient, not only signers: a template can also carry
+        // copy-receivers, viewers or blank placeholders, and DocuSign refuses
+        // an envelope where any of them has no email.
+        $recipients = $tpl->getRecipients();
+        $kinds = [
+            'signer' => $recipients->getSigners(),
+            'carbon copy' => $recipients->getCarbonCopies(),
+            'certified delivery' => $recipients->getCertifiedDeliveries(),
+            'agent' => $recipients->getAgents(),
+            'editor' => $recipients->getEditors(),
+            'intermediary' => $recipients->getIntermediaries(),
+            'in-person signer' => $recipients->getInPersonSigners(),
+            'witness' => $recipients->getWitnesses(),
+            'notary' => $recipients->getNotaries(),
+            'seal' => $recipients->getSeals(),
+        ];
+        $this->line('All recipients:');
+        foreach ($kinds as $kind => $list) {
+            foreach ($list ?? [] as $r) {
+                $this->line(sprintf(
+                    '  - %s: role "%s", recipientId=%s, routingOrder=%s, name=%s, email=%s',
+                    $kind,
+                    $r->getRoleName() ?? '',
+                    $r->getRecipientId(),
+                    $r->getRoutingOrder(),
+                    $r->getName() !== null && $r->getName() !== '' ? $r->getName() : '(blank)',
+                    method_exists($r, 'getEmail') && $r->getEmail() ? $r->getEmail() : '(blank)',
+                ));
+            }
+        }
+        $this->line('');
+
         foreach ($tpl->getRecipients()->getSigners() ?? [] as $signer) {
             $this->line(sprintf(
                 '  Role: %s  (recipientId=%s, routingOrder=%s)',
