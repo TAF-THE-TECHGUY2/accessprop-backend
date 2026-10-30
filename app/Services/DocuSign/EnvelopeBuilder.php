@@ -36,24 +36,13 @@ class EnvelopeBuilder
         // quoted now and kept with the envelope. The old template does not.
         $pricing = $this->usesTaxPackages() ? $this->quote($investor) : null;
 
-        $envelopeDefinition = $this->buildEnvelopeDefinition(
+        $envelopeId = $this->createEnvelope($this->buildEnvelopeDefinition(
             templateId: $templateId,
             investor: $investor,
             counterSignerEmail: $counterSignerEmail,
             counterSignerName: $counterSignerName,
             pricing: $pricing,
-        );
-
-        $created = $this->client->envelopes()->createEnvelope(
-            $this->client->accountId(),
-            $envelopeDefinition
-        );
-
-        $envelopeId = $created->getEnvelopeId();
-
-        if (! $envelopeId) {
-            throw new RuntimeException('DocuSign did not return an envelope ID.');
-        }
+        ));
 
         return SigningEnvelope::create([
             'investor_id' => $investor->id,
@@ -68,6 +57,43 @@ class EnvelopeBuilder
             'counter_signer_name' => $counterSignerName,
             'sent_at' => now(),
         ]);
+    }
+
+    /**
+     * A test send: the same envelope a real one would be, to addresses of the
+     * caller's choosing, recorded nowhere. The webhook ignores envelopes it has
+     * no record of, so signing it changes nothing in the app.
+     */
+    public function sendTestEnvelope(
+        Investor $investor,
+        string $templateId,
+        string $counterSignerEmail,
+        string $counterSignerName,
+        bool $withPricing,
+    ): array {
+        $pricing = $withPricing ? $this->quote($investor) : null;
+
+        $envelopeId = $this->createEnvelope($this->buildEnvelopeDefinition(
+            templateId: $templateId,
+            investor: $investor,
+            counterSignerEmail: $counterSignerEmail,
+            counterSignerName: $counterSignerName,
+            pricing: $pricing,
+        ));
+
+        return ['envelopeId' => $envelopeId, 'pricing' => $pricing];
+    }
+
+    private function createEnvelope(EnvelopeDefinition $definition): string
+    {
+        $created = $this->client->envelopes()->createEnvelope($this->client->accountId(), $definition);
+        $envelopeId = $created->getEnvelopeId();
+
+        if (! $envelopeId) {
+            throw new RuntimeException('DocuSign did not return an envelope ID.');
+        }
+
+        return $envelopeId;
     }
 
     /**

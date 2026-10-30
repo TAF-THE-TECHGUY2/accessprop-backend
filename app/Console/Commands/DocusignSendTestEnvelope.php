@@ -2,101 +2,93 @@
 
 namespace App\Console\Commands;
 
+use App\Models\Fund;
 use App\Models\Investor;
 use App\Services\DocuSign\EnvelopeBuilder;
 use Illuminate\Console\Command;
 
+/**
+ * Sends a real test envelope without touching the database: the investor is
+ * held in memory and no envelope is recorded, so nothing appears in the admin
+ * and signing it changes nothing in the app. Both signers are addresses you
+ * choose, so nobody is asked to countersign a test.
+ */
 class DocusignSendTestEnvelope extends Command
 {
     protected $signature = 'docusign:send-test
-                            {--email= : Override investor email (otherwise uses --investor or fake fixture)}
-                            {--investor= : Investor code or ID to send to (otherwise creates an in-memory fake)}';
+                            {--email= : Who signs as the investor (required)}
+                            {--counter-signer-email= : Who signs as the counter signer (required; not the real one)}
+                            {--template= : Template ID to test; defaults to the one a real send would use}
+                            {--amount=10000 : Investment amount to price}
+                            {--non-us : Test as a non-US person (W-8BEN package)}
+                            {--name=Test Investor : Investor name to fill in}';
 
-    protected $description = 'Send a test DocuSign envelope for the subscription agreement';
+    protected $description = 'Send a test subscription agreement to addresses you choose, recording nothing';
 
     public function handle(EnvelopeBuilder $builder): int
     {
-        $investor = $this->resolveInvestor();
+        $email = (string) $this->option('email');
+        $counterEmail = (string) $this->option('counter-signer-email');
 
-        $this->info("Sending subscription agreement envelope to: {$investor->email} ({$investor->name})");
-        $this->line("  Investor ID: {$investor->id}");
-        $this->line("  Accreditation: {$investor->accreditation_status}");
+        if ($email === '' || $counterEmail === '') {
+            $this->error('Give both --email and --counter-signer-email. Use addresses you control: they will be asked to sign.');
 
-        $envelope = $builder->sendSubscriptionAgreement($investor);
+            return self::FAILURE;
+        }
+
+        $active = Fund::where('status', 'active')->get();
+        if ($active->count() !== 1) {
+            $this->error('Expected exactly one active fund to price against; found '.$active->count().'.');
+
+            return self::FAILURE;
+        }
+
+        $amount = (float) $this->option('amount');
+        $usPerson = ! $this->option('non-us');
+
+        // In memory only: never saved.
+        $investor = new Investor([
+            'code' => 'inv-test',
+            'name' => (string) $this->option('name'),
+            'email' => $email,
+            'country' => $usPerson ? 'United States' : 'United Kingdom',
+            'fund_id' => $active->first()->id,
+            'accreditation_status' => 'accredited',
+            'personal_residency' => $usPerson ? Investor::US_PERSON : Investor::NON_US_PERSON,
+            'investment_amount' => $amount,
+            'investment_commitment' => $amount,
+            'address_line1' => '1 Test Street',
+            'address_city' => 'Boston',
+            'address_state' => 'MA',
+            'address_postal_code' => '02108',
+            'address_country' => $usPerson ? 'United States' : 'United Kingdom',
+        ]);
+
+        $templateId = (string) ($this->option('template') ?: $builder->resolveTemplateId($investor));
+        // A template named outright is one of the new packages under test, so
+        // it gets the pricing; otherwise price only if a real send would.
+        $withPricing = $this->option('template') !== null || $builder->usesTaxPackages();
+
+        $this->info("Template:        {$templateId}");
+        $this->line("Investor signs:  {$email}");
+        $this->line("Counter signs:   {$counterEmail}");
+
+        $result = $builder->sendTestEnvelope($investor, $templateId, $counterEmail, 'Test Counter Signer', $withPricing);
+
+        if ($result['pricing']) {
+            $p = $result['pricing'];
+            $this->line('');
+            $this->line('Filled in on the Subscription Agreement:');
+            foreach ($p['display'] as $label => $value) {
+                $this->line(sprintf('  %-26s %s', $label, $value));
+            }
+            $this->line("  (Base NAV {$p['base_nav']} as of {$p['base_nav_as_of']}, premium {$p['premium_pct']}%)");
+        }
 
         $this->line('');
-        $this->info('✅ Envelope sent.');
-        $this->line("  DocuSign Envelope ID: {$envelope->docusign_envelope_id}");
-        $this->line("  Status: {$envelope->status}");
-        $this->line("  DB row ID: {$envelope->id}");
-        $this->line('');
-        $this->line('Check the investor inbox for the DocuSign signing email.');
+        $this->info("Sent. Envelope {$result['envelopeId']}. Nothing was recorded in the app.");
+        $this->line('Sign as the investor first; the counter signer gets their email after.');
 
         return self::SUCCESS;
-    }
-
-    private function resolveInvestor(): Investor
-    {
-        $identifier = $this->option('investor');
-
-        if ($identifier !== null && $identifier !== '') {
-            $investor = is_numeric($identifier)
-                ? Investor::find((int) $identifier)
-                : Investor::where('code', $identifier)->first();
-
-            if (! $investor) {
-                $this->error("Investor not found: {$identifier}");
-
-                exit(1);
-            }
-
-            if ($emailOverride = $this->option('email')) {
-                $investor->email = $emailOverride;
-            }
-
-            return $investor;
-        }
-
-        // Find or create a fake test investor (smoke testing without registering)
-        $email = $this->option('email') ?: 'tafara@modus10.co.za';
-
-        $investor = Investor::firstWhere('email', $email);
-
-        if ($investor) {
-            return $investor;
-        }
-
-        $this->warn("No investor exists with email {$email}. Creating a test investor record.");
-
-        return Investor::create([
-            'code' => 'inv-test-'.now()->timestamp,
-            'name' => 'Tafara Smoke Test',
-            'email' => $email,
-            'password' => 'smoke-test-only',
-            'phone' => null,
-            'country' => 'South Africa',
-            'joined_at' => now(),
-            'investment_amount' => 25000,
-            'accreditation_status' => 'non_accredited',
-            'kyc_status' => 'pending',
-            'accreditation_verification_status' => 'not_started',
-            'investment_status' => 'awaiting_kyc',
-            'dashboard_status' => 'pending',
-            'document_signing_status' => 'not_started',
-            'address_line1' => '123 Test Street',
-            'address_line2' => null,
-            'address_city' => 'Cape Town',
-            'address_state' => 'WC',
-            'address_postal_code' => '8001',
-            'address_country' => 'South Africa',
-            'personal_investor_type' => 'Individual',
-            'personal_residency' => 'Non-U.S. Person',
-            'experience' => 'new',
-            'investment_fund_name' => 'Access Real Estate Fund I',
-            'investment_commitment' => 25000,
-            'investment_funded' => 0,
-            'investment_wallet_status' => 'KYC required',
-            'investment_expected_yield' => '8.0% target',
-        ]);
     }
 }
