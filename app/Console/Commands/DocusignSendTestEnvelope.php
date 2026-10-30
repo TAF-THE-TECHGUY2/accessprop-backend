@@ -20,7 +20,8 @@ class DocusignSendTestEnvelope extends Command
                             {--template= : Template ID to test; defaults to the one a real send would use}
                             {--amount=10000 : Investment amount to price}
                             {--non-us : Test as a non-US person (W-8BEN package)}
-                            {--name=Test Investor : Investor name to fill in}';
+                            {--name=Test Investor : Investor name to fill in}
+                            {--dry-run : Print the request that would be sent, and send nothing}';
 
     protected $description = 'Send a test subscription agreement to addresses you choose, recording nothing';
 
@@ -78,6 +79,27 @@ class DocusignSendTestEnvelope extends Command
         $this->info("Template:        {$templateId}");
         $this->line("Investor signs:  {$email}");
         $this->line("Counter signs:   {$counterName} <{$counterEmail}>");
+
+        if ($this->option('dry-run')) {
+            $ids = $builder->templateRecipientIds($templateId);
+            $this->line('');
+            $this->line('Recipient IDs read from the template: '.json_encode($ids));
+            $definition = $builder->buildEnvelopeDefinition(
+                templateId: $templateId,
+                investor: $investor,
+                counterSignerEmail: $counterEmail,
+                counterSignerName: $counterName,
+                pricing: $withPricing ? $builder->quote($investor) : null,
+                recipientIds: $ids,
+            );
+            $this->line(json_encode(
+                \DocuSign\eSign\ObjectSerializer::sanitizeForSerialization($definition),
+                JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE
+            ));
+            $this->info('Dry run: nothing was sent.');
+
+            return self::SUCCESS;
+        }
 
         $result = $builder->sendTestEnvelope($investor, $templateId, $counterEmail, $counterName, $withPricing);
 
