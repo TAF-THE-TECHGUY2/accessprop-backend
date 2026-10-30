@@ -73,8 +73,14 @@ class EnvelopeBuilder
         string $counterSignerEmail,
         string $counterSignerName,
         bool $withPricing,
+        bool $prefill = true,
     ): array {
         $pricing = $withPricing ? $this->quote($investor) : null;
+
+        // Diagnostic: the same envelope with nothing filled in.
+        if ($pricing !== null && ! $prefill) {
+            $pricing['display'] = [];
+        }
 
         $envelopeId = $this->createEnvelope($this->buildEnvelopeDefinition(
             templateId: $templateId,
@@ -272,7 +278,7 @@ class EnvelopeBuilder
                         ->setName($investor->name)
                         ->setEmail($investor->email)
                         ->setRoutingOrder($investorOrder)
-                        ->setTabs($this->labelledValueTabs($pricing['display'])),
+                        ->setTabs($pricing['display'] ? $this->labelledValueTabs($pricing['display']) : null),
                     (new TemplateRole())
                         ->setRoleName($counterSignerRoleName)
                         ->setName($counterSignerName)

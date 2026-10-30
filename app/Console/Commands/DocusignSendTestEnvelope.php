@@ -21,7 +21,8 @@ class DocusignSendTestEnvelope extends Command
                             {--amount=10000 : Investment amount to price}
                             {--non-us : Test as a non-US person (W-8BEN package)}
                             {--name=Test Investor : Investor name to fill in}
-                            {--dry-run : Print the request that would be sent, and send nothing}';
+                            {--dry-run : Print the request that would be sent, and send nothing}
+                            {--no-prefill : Send without filling the five priced fields, to isolate a template problem}';
 
     protected $description = 'Send a test subscription agreement to addresses you choose, recording nothing';
 
@@ -102,7 +103,10 @@ class DocusignSendTestEnvelope extends Command
             return self::SUCCESS;
         }
 
-        $result = $builder->sendTestEnvelope($investor, $templateId, $counterEmail, $counterName, $withPricing);
+        $result = $builder->sendTestEnvelope(
+            $investor, $templateId, $counterEmail, $counterName, $withPricing,
+            prefill: ! $this->option('no-prefill'),
+        );
 
         if ($result['pricing']) {
             $p = $result['pricing'];

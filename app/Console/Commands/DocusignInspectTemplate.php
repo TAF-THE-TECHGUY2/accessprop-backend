@@ -106,6 +106,42 @@ class DocusignInspectTemplate extends Command
         }
         $this->line('');
 
+        // Each role's own fields, asked for directly, with the role's GUID: the
+        // definitive answer to which fields belong to which role.
+        $opts = new \DocuSign\eSign\Api\TemplatesApi\ListRecipientsOptions();
+        $opts->setIncludeTabs('true');
+        $withTabs = $client->templates()->listRecipients($client->accountId(), $templateId, $opts);
+        $this->line('Fields owned by each role (asked directly):');
+        foreach ($withTabs->getSigners() ?? [] as $signer) {
+            $count = 0;
+            $labels = [];
+            $tabs = $signer->getTabs();
+            if ($tabs) {
+                foreach (get_class_methods($tabs) as $method) {
+                    if (! preg_match('/^get(\w+)Tabs$/', $method, $m)) {
+                        continue;
+                    }
+                    foreach ($tabs->{$method}() ?? [] as $tab) {
+                        $count++;
+                        if (in_array($m[1], ['Text', 'SignHere'], true)) {
+                            $labels[] = $m[1].' "'.$tab->getTabLabel().'" p'.$tab->getPageNumber();
+                        }
+                    }
+                }
+            }
+            $this->line(sprintf(
+                '  %s (recipientId=%s, guid=%s): %d fields',
+                json_encode($signer->getRoleName(), JSON_UNESCAPED_UNICODE),
+                $signer->getRecipientId(),
+                method_exists($signer, 'getRecipientIdGuid') ? ($signer->getRecipientIdGuid() ?: '-') : '-',
+                $count,
+            ));
+            foreach ($labels as $l) {
+                $this->line('      - '.$l);
+            }
+        }
+        $this->line('');
+
         foreach ($tpl->getRecipients()->getSigners() ?? [] as $signer) {
             $this->line(sprintf(
                 '  Role: %s  (recipientId=%s, routingOrder=%s)',
