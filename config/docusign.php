@@ -36,6 +36,13 @@ return [
         'counter_signer' => 'Counter Signer',
     ],
 
+    // Who signs first. The fund countersigns first, so the investor receives a
+    // package already signed by the company; flip these to reverse it.
+    'routing_order' => [
+        'counter_signer' => (string) env('DOCUSIGN_COUNTER_SIGNER_ROUTING_ORDER', '1'),
+        'investor' => (string) env('DOCUSIGN_INVESTOR_ROUTING_ORDER', '2'),
+    ],
+
     /*
     |--------------------------------------------------------------------------
     | Tab Positions

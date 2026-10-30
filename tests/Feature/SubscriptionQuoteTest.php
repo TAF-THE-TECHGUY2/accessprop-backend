@@ -110,10 +110,11 @@ class SubscriptionQuoteTest extends TestCase
         // Matched to the template's roles by name; no recipient IDs involved.
         $this->assertSame('Investor', $investorRole->getRoleName());
         $this->assertSame('ada@example.com', $investorRole->getEmail());
-        $this->assertSame('1', $investorRole->getRoutingOrder());
+        // The fund countersigns first.
+        $this->assertSame('2', $investorRole->getRoutingOrder());
         $this->assertSame('Counter Signer', $counterRole->getRoleName());
         $this->assertSame('dion@example.com', $counterRole->getEmail());
-        $this->assertSame('2', $counterRole->getRoutingOrder());
+        $this->assertSame('1', $counterRole->getRoutingOrder());
 
         // Fields filled by Data Label only; nothing positioned, no signatures.
         $tabs = $investorRole->getTabs();

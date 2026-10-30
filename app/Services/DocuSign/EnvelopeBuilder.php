@@ -254,6 +254,8 @@ class EnvelopeBuilder
         // an email.
         $investorRoleName = $this->matchRoleName((string) config('docusign.roles.investor'), $templateRoleNames);
         $counterSignerRoleName = $this->matchRoleName((string) config('docusign.roles.counter_signer'), $templateRoleNames);
+        $investorOrder = (string) config('docusign.routing_order.investor', '2');
+        $counterSignerOrder = (string) config('docusign.routing_order.counter_signer', '1');
 
         // The signing packages are sent as the template with its roles filled
         // in, DocuSign's plain form for one template: roles are matched by
@@ -269,13 +271,13 @@ class EnvelopeBuilder
                         ->setRoleName($investorRoleName)
                         ->setName($investor->name)
                         ->setEmail($investor->email)
-                        ->setRoutingOrder('1')
+                        ->setRoutingOrder($investorOrder)
                         ->setTabs($this->labelledValueTabs($pricing['display'])),
                     (new TemplateRole())
                         ->setRoleName($counterSignerRoleName)
                         ->setName($counterSignerName)
                         ->setEmail($counterSignerEmail)
-                        ->setRoutingOrder('2'),
+                        ->setRoutingOrder($counterSignerOrder),
                 ])
                 ->setEmailSubject('Access Real Estate Fund I — your subscription documents')
                 ->setEmailBlurb("Hi {$investor->name},\n\nYour subscription documents for Access Real Estate Fund I are ready to sign. Please review and sign at your earliest convenience.\n\nIf you have any questions, reply to this email.\n\nThank you,\nAccess Properties")
@@ -287,7 +289,7 @@ class EnvelopeBuilder
             ->setName($investor->name)
             ->setRoleName($investorRoleName)
             ->setRecipientId($recipientIds[$investorRoleName] ?? '1')
-            ->setRoutingOrder('1')
+            ->setRoutingOrder($investorOrder)
             ->setClientUserId(null)
             // The signing packages have every field placed in the template;
             // the app only fills the labelled ones. The old template had none,
@@ -301,7 +303,7 @@ class EnvelopeBuilder
             ->setName($counterSignerName)
             ->setRoleName($counterSignerRoleName)
             ->setRecipientId($recipientIds[$counterSignerRoleName] ?? '2')
-            ->setRoutingOrder('2');
+            ->setRoutingOrder($counterSignerOrder);
 
         if ($pricing === null) {
             $counterSigner->setTabs($this->buildTabs('counter_signer', $investor));
