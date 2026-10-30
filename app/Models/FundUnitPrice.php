@@ -10,7 +10,10 @@ class FundUnitPrice extends Model
     protected $guarded = ['id'];
 
     protected $casts = [
-        'price' => 'decimal:4',
+        // The column has held 8 decimal places since August; reading it at 4
+        // rounded every NAV the app priced units from. The Valuation and Unit
+        // Pricing Policy prices subscriptions on the unrounded Base NAV.
+        'price' => 'decimal:8',
         'as_of_date' => 'date',
     ];
 
