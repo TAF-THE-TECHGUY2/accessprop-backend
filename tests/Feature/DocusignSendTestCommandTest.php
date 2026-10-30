@@ -11,18 +11,22 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Mockery;
 use Tests\TestCase;
 
-/** A test send must leave no trace in the app and must not involve the real counter signer. */
+/** A test send must leave no trace in the app; the counter signer is the configured one. */
 class DocusignSendTestCommandTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_it_needs_both_signers_named(): void
+    public function test_it_needs_a_real_investor_address(): void
     {
-        $this->artisan('docusign:send-test', ['--email' => 'me@example.com'])->assertFailed();
+        $this->artisan('docusign:send-test', ['--email' => 'YOUR_SECOND_EMAIL'])->assertFailed();
     }
 
     public function test_it_sends_the_named_template_priced_and_saves_nothing(): void
     {
+        config([
+            'docusign.counter_signer.email' => 'dion@example.com',
+            'docusign.counter_signer.name' => 'Dionysios Kaskarelis',
+        ]);
         $fund = Fund::create(['code' => 'aref-i', 'name' => 'Access Real Estate Fund I', 'status' => 'active']);
         FundUnitPrice::create(['fund_id' => $fund->id, 'as_of_date' => now()->subDay()->toDateString(), 'price' => '14.0945809850']);
 
@@ -30,7 +34,8 @@ class DocusignSendTestCommandTest extends TestCase
         $builder->shouldReceive('sendTestEnvelope')
             ->once()
             ->withArgs(fn ($investor, $template, $counterEmail, $counterName, $withPricing) => $template === 'tpl-w9'
-                && $counterEmail === 'second@example.com'
+                && $counterEmail === 'dion@example.com'
+                && $counterName === 'Dionysios Kaskarelis'
                 && $investor->email === 'me@example.com'
                 && ! $investor->exists
                 && $withPricing === true)
@@ -39,7 +44,6 @@ class DocusignSendTestCommandTest extends TestCase
 
         $this->artisan('docusign:send-test', [
             '--email' => 'me@example.com',
-            '--counter-signer-email' => 'second@example.com',
             '--template' => 'tpl-w9',
         ])->expectsOutputToContain('709.4925')->assertSuccessful();
 

@@ -10,14 +10,13 @@ use Illuminate\Console\Command;
 /**
  * Sends a real test envelope without touching the database: the investor is
  * held in memory and no envelope is recorded, so nothing appears in the admin
- * and signing it changes nothing in the app. Both signers are addresses you
- * choose, so nobody is asked to countersign a test.
+ * and signing it changes nothing in the app. The investor is an address you
+ * choose; the counter signer is always the configured one, as for a real send.
  */
 class DocusignSendTestEnvelope extends Command
 {
     protected $signature = 'docusign:send-test
                             {--email= : Who signs as the investor (required)}
-                            {--counter-signer-email= : Who signs as the counter signer (required; not the real one)}
                             {--template= : Template ID to test; defaults to the one a real send would use}
                             {--amount=10000 : Investment amount to price}
                             {--non-us : Test as a non-US person (W-8BEN package)}
@@ -28,10 +27,17 @@ class DocusignSendTestEnvelope extends Command
     public function handle(EnvelopeBuilder $builder): int
     {
         $email = (string) $this->option('email');
-        $counterEmail = (string) $this->option('counter-signer-email');
+        $counterEmail = (string) config('docusign.counter_signer.email');
+        $counterName = (string) config('docusign.counter_signer.name');
 
-        if ($email === '' || $counterEmail === '') {
-            $this->error('Give both --email and --counter-signer-email. Use addresses you control: they will be asked to sign.');
+        if (! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $this->error('Give --email with a real address you can open: it receives the signing email.');
+
+            return self::FAILURE;
+        }
+
+        if (! filter_var($counterEmail, FILTER_VALIDATE_EMAIL)) {
+            $this->error('DOCUSIGN_DEFAULT_COUNTER_SIGNER_EMAIL is not set to a valid address.');
 
             return self::FAILURE;
         }
@@ -71,9 +77,9 @@ class DocusignSendTestEnvelope extends Command
 
         $this->info("Template:        {$templateId}");
         $this->line("Investor signs:  {$email}");
-        $this->line("Counter signs:   {$counterEmail}");
+        $this->line("Counter signs:   {$counterName} <{$counterEmail}>");
 
-        $result = $builder->sendTestEnvelope($investor, $templateId, $counterEmail, 'Test Counter Signer', $withPricing);
+        $result = $builder->sendTestEnvelope($investor, $templateId, $counterEmail, $counterName, $withPricing);
 
         if ($result['pricing']) {
             $p = $result['pricing'];
@@ -87,7 +93,7 @@ class DocusignSendTestEnvelope extends Command
 
         $this->line('');
         $this->info("Sent. Envelope {$result['envelopeId']}. Nothing was recorded in the app.");
-        $this->line('Sign as the investor first; the counter signer gets their email after.');
+        $this->line("Sign as the investor first; {$counterName} gets the countersigning email after.");
 
         return self::SUCCESS;
     }
