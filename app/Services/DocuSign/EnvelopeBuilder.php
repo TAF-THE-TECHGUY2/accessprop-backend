@@ -42,6 +42,7 @@ class EnvelopeBuilder
             counterSignerEmail: $counterSignerEmail,
             counterSignerName: $counterSignerName,
             pricing: $pricing,
+            recipientIds: $this->templateRecipientIds($templateId),
         ));
 
         return SigningEnvelope::create([
@@ -79,9 +80,38 @@ class EnvelopeBuilder
             counterSignerEmail: $counterSignerEmail,
             counterSignerName: $counterSignerName,
             pricing: $pricing,
+            recipientIds: $this->templateRecipientIds($templateId),
         ));
 
         return ['envelopeId' => $envelopeId, 'pricing' => $pricing];
+    }
+
+    /**
+     * Each role's recipient ID in the template, by role name.
+     *
+     * DocuSign merges the app's signers into the template's roles by recipient
+     * ID. The app numbered them Investor 1 and Counter Signer 2, which matched
+     * the old template by luck; a template whose roles were added the other
+     * way round got the Counter Signer's address on the Investor's role and an
+     * empty one on the other ("'email' not set for recipient with recipientId
+     * 1"). Reading the IDs from the template makes the order irrelevant.
+     *
+     * @return array<string, string>
+     */
+    public function templateRecipientIds(string $templateId): array
+    {
+        $ids = [];
+        $signers = $this->client->templates()
+            ->listRecipients($this->client->accountId(), $templateId)
+            ->getSigners() ?? [];
+
+        foreach ($signers as $signer) {
+            if ($signer->getRoleName() !== null && $signer->getRecipientId() !== null) {
+                $ids[$signer->getRoleName()] = (string) $signer->getRecipientId();
+            }
+        }
+
+        return $ids;
     }
 
     private function createEnvelope(EnvelopeDefinition $definition): string
@@ -211,6 +241,7 @@ class EnvelopeBuilder
         string $counterSignerEmail,
         string $counterSignerName,
         ?array $pricing = null,
+        array $recipientIds = [],
     ): EnvelopeDefinition {
         $investorRoleName = (string) config('docusign.roles.investor');
         $counterSignerRoleName = (string) config('docusign.roles.counter_signer');
@@ -219,7 +250,7 @@ class EnvelopeBuilder
             ->setEmail($investor->email)
             ->setName($investor->name)
             ->setRoleName($investorRoleName)
-            ->setRecipientId('1')
+            ->setRecipientId($recipientIds[$investorRoleName] ?? '1')
             ->setRoutingOrder('1')
             ->setClientUserId(null)
             // The signing packages have every field placed in the template;
@@ -233,7 +264,7 @@ class EnvelopeBuilder
             ->setEmail($counterSignerEmail)
             ->setName($counterSignerName)
             ->setRoleName($counterSignerRoleName)
-            ->setRecipientId('2')
+            ->setRecipientId($recipientIds[$counterSignerRoleName] ?? '2')
             ->setRoutingOrder('2');
 
         if ($pricing === null) {

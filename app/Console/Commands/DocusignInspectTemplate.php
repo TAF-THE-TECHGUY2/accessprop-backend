@@ -30,8 +30,9 @@ class DocusignInspectTemplate extends Command
 
         foreach ($tpl->getRecipients()->getSigners() ?? [] as $signer) {
             $this->line(sprintf(
-                '  Role: %s  (routingOrder=%s)',
+                '  Role: %s  (recipientId=%s, routingOrder=%s)',
                 $signer->getRoleName(),
+                $signer->getRecipientId(),
                 $signer->getRoutingOrder()
             ));
 

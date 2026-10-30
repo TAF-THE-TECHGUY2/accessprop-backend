@@ -141,4 +141,28 @@ class SubscriptionQuoteTest extends TestCase
         $this->expectExceptionMessage('no published Base NAV');
         app(EnvelopeBuilder::class)->quote($this->investor());
     }
+
+    public function test_signers_take_the_template_s_own_recipient_ids(): void
+    {
+        // Roles added Counter Signer first, as in the production W-9 template.
+        $definition = app(EnvelopeBuilder::class)->buildEnvelopeDefinition(
+            templateId: 'tpl-w9',
+            investor: $investor = $this->investor(),
+            counterSignerEmail: 'dion@example.com',
+            counterSignerName: 'Dion',
+            pricing: app(EnvelopeBuilder::class)->quote($investor),
+            recipientIds: ['Counter Signer' => '1', 'Investor' => '2'],
+        );
+
+        [$investorSigner, $counterSigner] = $definition->getCompositeTemplates()[0]
+            ->getInlineTemplates()[0]->getRecipients()->getSigners();
+
+        $this->assertSame('2', $investorSigner->getRecipientId());
+        $this->assertSame('ada@example.com', $investorSigner->getEmail());
+        $this->assertSame('1', $counterSigner->getRecipientId());
+        $this->assertSame('dion@example.com', $counterSigner->getEmail());
+        // Signing order is still Investor first, whatever the IDs.
+        $this->assertSame('1', $investorSigner->getRoutingOrder());
+        $this->assertSame('2', $counterSigner->getRoutingOrder());
+    }
 }
