@@ -12,6 +12,7 @@ use App\Models\InvestorActivityLog;
 use App\Models\InvestorMessage;
 use App\Models\PartnerMatch;
 use App\Models\PaymentConfirmation;
+use App\Models\SigningEnvelope;
 use App\Services\Integrations\InvestReadyConnectClient;
 use App\Services\Integrations\PersonaClient;
 use App\Services\Integrations\StripeClient;
@@ -1812,6 +1813,17 @@ class InvestorProcessingService
 
         $fund = $this->resolveFundForInvestor($investor);
 
+        // The terms the investor signed, when there are any for this payment.
+        // The Subscription Agreement presents a price and a number of Units
+        // and says a revised figure needs new documents, so the Units issued
+        // are the Units signed for — not a re-pricing on whatever NAV is
+        // current when the money clears. An explicit price or unit count
+        // (an admin entering a position) still wins.
+        $signedQuote = null;
+        if ($priceOverride === null && $unitsPurchased === null) {
+            [$quoteEnvelope, $signedQuote] = $this->signedQuoteFor($investor, $fund, $amount);
+        }
+
         // Price at the date of investment, not today. A launch investor who put
         // in $100,000 when units were $10.00 holds 10,000 units — valuing that
         // subscription at today's price would fabricate both the unit count and
@@ -1825,7 +1837,7 @@ class InvestorProcessingService
         $bookValueRow = $fund->bookValueAsOf($date);
         $bookValue = $bookValueRow ? (float) $bookValueRow->price : null;
 
-        if ($priceOverride === null && ($bookValue === null || $bookValue <= 0)) {
+        if ($priceOverride === null && $signedQuote === null && ($bookValue === null || $bookValue <= 0)) {
             throw new RuntimeException(sprintf(
                 'Fund %s has no published unit price on or before %s, and no unit count or price was supplied; refusing to mint units at an invented price.',
                 $fund->code,
@@ -1841,9 +1853,11 @@ class InvestorProcessingService
         // 8dp, not 4. A derived price is contribution ÷ units and rarely round:
         // 404,329.34 ÷ 40,400 = 10.008152. Rounding to 4dp loses nearly $2 on
         // that row when multiplied back out, and the reconciliation fails.
-        $pricePerUnit = $priceOverride !== null
-            ? round($priceOverride, 8)
-            : round($bookValue * (1 + ($premiumPct / 100)), 8);
+        $pricePerUnit = match (true) {
+            $priceOverride !== null => round($priceOverride, 8),
+            $signedQuote !== null => round((float) $signedQuote['price_per_unit'], 8),
+            default => round($bookValue * (1 + ($premiumPct / 100)), 8),
+        };
 
         if ($pricePerUnit <= 0) {
             throw new RuntimeException(sprintf(
@@ -1873,7 +1887,16 @@ class InvestorProcessingService
             ? round($unitsPurchased, 6)
             : round($amount / $pricePerUnit, 6);
 
-        FundTransaction::create([
+        // Signed terms replace all of the above: the NAV, premium, price and
+        // Units on the agreement, recorded as quoted.
+        if ($signedQuote !== null) {
+            $bookValue = (float) $signedQuote['base_nav'];
+            $recordedPremium = (float) $signedQuote['premium_pct'];
+            $pricePerUnit = round((float) $signedQuote['price_per_unit'], 8);
+            $units = round((float) $signedQuote['units'], 6);
+        }
+
+        $transaction = FundTransaction::create([
             'investor_id' => $investor->id,
             'fund_id' => $fund->id,
             'transaction_date' => $date,
@@ -1892,8 +1915,77 @@ class InvestorProcessingService
             'source' => $source,
         ]);
 
+        // Used once: a later top-up is new money and needs its own terms.
+        if ($signedQuote !== null) {
+            $quoteEnvelope->update(['pricing' => $signedQuote + [
+                'applied_at' => now()->toIso8601String(),
+                'fund_transaction_id' => $transaction->id,
+            ]]);
+            $this->logActivity(
+                $investor,
+                'units_issued_at_signed_terms',
+                'Units issued at signed terms',
+                sprintf(
+                    '%s Units at $%s per Unit, as quoted on the agreement signed %s (Base NAV $%s of %s).',
+                    number_format($units, 4),
+                    number_format($pricePerUnit, 4),
+                    optional($quoteEnvelope->completed_at)->toDateString() ?? 'earlier',
+                    $signedQuote['base_nav'],
+                    $signedQuote['base_nav_as_of'],
+                ),
+                ['signingEnvelopeId' => $quoteEnvelope->id, 'fundTransactionId' => $transaction->id]
+            );
+        }
+
         $this->recomputeHoldingFromLedger($investor->id, (int) $fund->id);
         $this->syncInvestmentFundedFromLedger($investor);
+    }
+
+    /**
+     * The unused quote from this investor's most recent fully signed agreement,
+     * if this payment is the one it priced. A payment of a different amount is
+     * outside what was signed: it is priced as before, and flagged for review.
+     *
+     * @return array{0: ?SigningEnvelope, 1: ?array}
+     */
+    private function signedQuoteFor(Investor $investor, Fund $fund, float $amount): array
+    {
+        $envelope = SigningEnvelope::query()
+            ->where('investor_id', $investor->id)
+            ->where('status', SigningEnvelope::STATUS_COMPLETED)
+            ->whereNotNull('pricing')
+            ->latest('completed_at')
+            ->latest('id')
+            ->get()
+            ->first(fn (SigningEnvelope $e) => empty($e->pricing['applied_at']));
+
+        if (! $envelope) {
+            return [null, null];
+        }
+
+        $quote = $envelope->pricing;
+
+        if ((int) ($quote['fund_id'] ?? 0) !== (int) $fund->id) {
+            return [null, null];
+        }
+
+        if (abs((float) $quote['amount'] - $amount) >= 0.01) {
+            $this->logActivity(
+                $investor,
+                'payment_differs_from_signed_terms',
+                'Payment differs from the signed agreement',
+                sprintf(
+                    'Received $%s against $%s on the signed agreement, so Units were priced at the current NAV instead. Review, and issue updated subscription documents if needed.',
+                    number_format($amount, 2),
+                    number_format((float) $quote['amount'], 2),
+                ),
+                ['signingEnvelopeId' => $envelope->id]
+            );
+
+            return [null, null];
+        }
+
+        return [$envelope, $quote];
     }
 
     /**

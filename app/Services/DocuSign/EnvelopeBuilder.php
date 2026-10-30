@@ -143,6 +143,7 @@ class EnvelopeBuilder
         $units = $amount / $pricePerUnit;
 
         return [
+            'fund_id' => $fund->id,
             'amount' => round($amount, 2),
             'base_nav' => (string) $nav->price,
             'base_nav_as_of' => $nav->as_of_date->toDateString(),
