@@ -60,6 +60,47 @@ class DocusignInspectTemplate extends Command
         }
         $this->line('');
 
+        // Every field on every document, with the recipient it belongs to.
+        // A field left belonging to a recipient that no longer exists (roles
+        // deleted and re-added after the fields were placed) makes DocuSign
+        // refuse the envelope: "'email' not set for recipient with recipientId".
+        $known = [];
+        foreach ($kinds as $list) {
+            foreach ($list ?? [] as $r) {
+                $known[(string) $r->getRecipientId()] = $r->getRoleName();
+            }
+        }
+        $docs = $client->templates()->listDocuments($client->accountId(), $templateId)->getTemplateDocuments() ?? [];
+        $this->line('Fields on the documents:');
+        foreach ($docs as $doc) {
+            $tabs = $client->templates()->getDocumentTabs($client->accountId(), $doc->getDocumentId(), $templateId);
+            $byRecipient = [];
+            foreach (get_class_methods($tabs) as $method) {
+                if (! preg_match('/^get(\w+)Tabs$/', $method, $m)) {
+                    continue;
+                }
+                foreach ($tabs->{$method}() ?? [] as $tab) {
+                    $rid = (string) $tab->getRecipientId();
+                    $byRecipient[$rid][] = $m[1].($tab->getTabLabel() ? ' "'.$tab->getTabLabel().'"' : '').' p'.$tab->getPageNumber();
+                }
+            }
+            $this->line(sprintf('  Document %s "%s":', $doc->getDocumentId(), $doc->getName()));
+            if (! $byRecipient) {
+                $this->line('    (no fields)');
+            }
+            foreach ($byRecipient as $rid => $fields) {
+                $owner = isset($known[$rid]) ? 'role "'.$known[$rid].'"' : 'NO SUCH RECIPIENT — orphaned';
+                $this->line(sprintf('    recipientId=%s (%s): %d fields', $rid, $owner, count($fields)));
+                foreach (array_slice($fields, 0, 40) as $f) {
+                    $this->line('      - '.$f);
+                }
+                if (count($fields) > 40) {
+                    $this->line('      … and '.(count($fields) - 40).' more');
+                }
+            }
+        }
+        $this->line('');
+
         foreach ($tpl->getRecipients()->getSigners() ?? [] as $signer) {
             $this->line(sprintf(
                 '  Role: %s  (recipientId=%s, routingOrder=%s)',
