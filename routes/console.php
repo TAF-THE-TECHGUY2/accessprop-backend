@@ -12,4 +12,6 @@ Artisan::command('inspire', function () {
 Schedule::command('sanctum:prune-expired --hours=24')->daily();
 
 // The app's own DocuSign emails: the next signer, reminders, completion.
-Schedule::command('agreements:follow-up')->hourly()->withoutOverlapping();
+// The safety net for a signer who closes DocuSign without coming back. Not
+// more often: DocuSign allows polling an envelope once per 15 minutes.
+Schedule::command('agreements:follow-up')->everyFifteenMinutes()->withoutOverlapping();

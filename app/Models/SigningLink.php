@@ -44,4 +44,13 @@ class SigningLink extends Model
     {
         return rtrim((string) config('app.frontend_url'), '/').'/sign/'.$this->token;
     }
+
+    /**
+     * Where DocuSign sends this signer back to. The page reports the return,
+     * and the app checks DocuSign at once instead of waiting for a webhook.
+     */
+    public function returnUrl(): string
+    {
+        return rtrim((string) config('app.frontend_url'), '/').'/signing/complete?t='.$this->token;
+    }
 }

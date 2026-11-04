@@ -77,10 +77,8 @@ class AgreementController extends Controller
             return response()->json(['message' => 'This agreement is no longer open for signing.'], Response::HTTP_CONFLICT);
         }
 
-        $returnUrl = rtrim((string) config('app.frontend_url'), '/').'/admin/investors/'.$envelope->investor?->code.'?signing=returned';
-
         try {
-            $url = $this->builder->signingUrl($envelope, $data['role'], $returnUrl);
+            $url = $this->builder->signingUrl($envelope, $data['role'], \App\Models\SigningLink::issue($envelope, $data['role'])->returnUrl());
         } catch (SigningNotYetOpen $e) {
             return response()->json(['message' => $e->getMessage()], Response::HTTP_CONFLICT);
         } catch (Throwable $e) {

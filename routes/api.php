@@ -53,6 +53,9 @@ Route::get('/legal-links', PublicSettingsController::class)->middleware('throttl
 Route::get('/sign/{token}', [SigningLinkController::class, 'open'])
     ->where('token', '[A-Za-z0-9]{64}')
     ->middleware('throttle:30,1');
+Route::post('/sign/{token}/returned', [SigningLinkController::class, 'returned'])
+    ->where('token', '[A-Za-z0-9]{64}')
+    ->middleware('throttle:10,1');
 
 Route::post('/webhooks/persona', PersonaWebhookController::class);
 Route::post('/webhooks/docusign', DocuSignWebhookController::class);

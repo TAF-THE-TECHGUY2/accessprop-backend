@@ -49,10 +49,8 @@ class InvestorPortalAgreementController extends Controller
             ->whereNotIn('status', self::CLOSED)
             ->findOrFail($id);
 
-        $returnUrl = rtrim((string) config('app.frontend_url'), '/').'/dashboard?signing=returned';
-
         try {
-            $url = $this->builder->signingUrl($envelope, 'investor', $returnUrl);
+            $url = $this->builder->signingUrl($envelope, 'investor', \App\Models\SigningLink::issue($envelope, 'investor')->returnUrl());
         } catch (SigningNotYetOpen) {
             return response()->json([
                 'message' => 'Your documents are with the fund for its signature first. You will be able to sign as soon as it has — we will also email you.',

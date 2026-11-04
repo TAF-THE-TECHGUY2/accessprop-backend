@@ -231,7 +231,39 @@ class AgreementEmailsTest extends TestCase
         $this->getJson("/api/sign/{$token}")
             ->assertOk()
             ->assertJsonPath('status', 'ready')
-            ->assertJsonPath('url', 'https://docusign.test/counter_signer?return=https://investor.ap.boston/signing/complete');
+            ->assertJsonPath('url', "https://docusign.test/counter_signer?return=https://investor.ap.boston/signing/complete?t={$token}");
+    }
+
+    public function test_coming_back_from_docusign_moves_the_agreement_on_at_once(): void
+    {
+        $env = $this->envelope();
+        $this->docusignSays('sent', 'sent', 'created');
+        $this->followUp($env);
+        $token = SigningLink::where('role', 'counter_signer')->first()->token;
+
+        // Dion signs and DocuSign sends him back; no webhook, no schedule.
+        $this->docusignSays('sent', 'completed', 'sent');
+        $this->postJson("/api/sign/{$token}/returned")
+            ->assertOk()
+            ->assertJsonPath('role', 'counter_signer')
+            ->assertJsonPath('signed', true);
+
+        Mail::assertSent(AgreementSignRequestMail::class, fn ($m) => $m->hasTo('jane@example.com') && $m->role === 'investor');
+
+        // A reload in the same minute does not ask DocuSign again.
+        $this->postJson("/api/sign/{$token}/returned")->assertOk();
+        Mail::assertSent(AgreementSignRequestMail::class, 2);
+    }
+
+    public function test_links_from_the_admin_also_come_back_to_the_check(): void
+    {
+        $env = $this->envelope();
+        $this->builderReturning(fn ($e, $role, $return) => $return);
+        Sanctum::actingAs(User::factory()->create());
+
+        $url = $this->postJson("/api/admin/agreements/{$env->id}/signing-link", ['role' => 'counter_signer'])->json('url');
+
+        $this->assertSame(SigningLink::where('role', 'counter_signer')->first()->returnUrl(), $url);
     }
 
     public function test_the_investor_s_link_waits_its_turn(): void
