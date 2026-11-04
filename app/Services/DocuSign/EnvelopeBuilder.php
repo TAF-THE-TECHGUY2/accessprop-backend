@@ -22,6 +22,9 @@ use RuntimeException;
 
 class EnvelopeBuilder
 {
+    /** The Data Labels the app fills on a signing package: the keys of quote()['display']. */
+    public const PRICED_LABELS = ['investor_full_name', 'total_purchase_price', 'subscription_premium_pct', 'price_per_unit', 'units'];
+
     public function __construct(private Client $client) {}
 
     public function sendSubscriptionAgreement(Investor $investor): SigningEnvelope
