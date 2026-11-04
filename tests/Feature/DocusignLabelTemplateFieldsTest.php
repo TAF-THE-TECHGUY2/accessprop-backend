@@ -22,14 +22,16 @@ class DocusignLabelTemplateFieldsTest extends TestCase
 {
     use RefreshDatabase;
 
-    private function templatesApi(array $textTabs): TemplatesApi
+    /** Counter Signer is recipient 1, Investor recipient 2. */
+    private function templatesApi(array $investorTabs, array $counterTabs = []): TemplatesApi
     {
         $api = Mockery::mock(TemplatesApi::class);
         $api->shouldReceive('get')->andReturn((new EnvelopeTemplate())->setRecipients((new Recipients())->setSigners([
             (new Signer())->setRoleName('Counter Signer')->setRecipientId('1'),
             (new Signer())->setRoleName('Investor ')->setRecipientId('2'),
         ])));
-        $api->shouldReceive('listTabs')->with('acct', '2', 'tpl-w9')->andReturn((new Tabs())->setTextTabs($textTabs));
+        $api->shouldReceive('listTabs')->with('acct', '1', 'tpl-w9')->andReturn((new Tabs())->setTextTabs($counterTabs));
+        $api->shouldReceive('listTabs')->with('acct', '2', 'tpl-w9')->andReturn((new Tabs())->setTextTabs($investorTabs));
 
         $client = Mockery::mock(Client::class);
         $client->shouldReceive('accountId')->andReturn('acct');
@@ -41,39 +43,74 @@ class DocusignLabelTemplateFieldsTest extends TestCase
 
     private function field(string $id, string $label, string $value): Text
     {
-        return (new Text())->setTabId($id)->setTabLabel($label)->setValue($value)->setPageNumber('2')->setShared('true')->setRequired('true');
+        return (new Text())->setTabId($id)->setTabLabel($label)->setValue($value)
+            ->setDocumentId('96295969')->setPageNumber('1')->setXPosition('310')->setYPosition('402')->setWidth('120')
+            ->setShared('true')->setRequired('true');
     }
 
-    public function test_default_text_becomes_the_data_label(): void
+    public function test_the_investor_s_fields_move_to_the_counter_signer(): void
     {
-        $tabs = [
-            $this->field('t1', 'Text 9f2c', 'investor_full_name'),
+        $api = $this->templatesApi([
+            $this->field('t1', 'investor_full_name', ''),
             $this->field('t2', 'Text 1ab0', ' Units '),
             $this->field('t3', 'Text 77de', 'something the investor types'),
-        ];
-        $api = $this->templatesApi($tabs);
-        $api->shouldReceive('updateTabs')->once()->withArgs(function ($acct, $recipient, $template, Tabs $update) {
-            $changed = collect($update->getTextTabs())->mapWithKeys(fn (Text $t) => [$t->getTabId() => $t]);
+        ]);
+        $api->shouldReceive('createTabs')->once()->withArgs(function ($acct, $recipient, $template, Tabs $tabs) {
+            $made = collect($tabs->getTextTabs())->keyBy(fn (Text $t) => $t->getTabLabel());
 
-            return $recipient === '2' && $template === 'tpl-w9'
-                && $changed->keys()->all() === ['t1', 't2']
-                && $changed['t1']->getTabLabel() === 'investor_full_name'
-                && $changed['t2']->getTabLabel() === 'units'
-                && $changed['t2']->getValue() === ''
-                && $changed['t2']->getShared() === 'false'
-                && $changed['t2']->getRequired() === 'false';
-        });
+            return $recipient === '1'
+                && $made->keys()->all() === ['investor_full_name', 'units']
+                && $made['units']->getTabId() === null
+                && $made['units']->getDocumentId() === '96295969'
+                && $made['units']->getPageNumber() === '1'
+                && $made['units']->getXPosition() === '310'
+                && $made['units']->getYPosition() === '402'
+                && $made['units']->getWidth() === '120'
+                && $made['units']->getValue() === ''
+                && $made['units']->getShared() === 'false'
+                && $made['units']->getRequired() === 'false';
+        })->ordered();
+        $api->shouldReceive('deleteTabs')->once()->withArgs(fn ($acct, $recipient, $template, Tabs $tabs) => $recipient === '2'
+            && collect($tabs->getTextTabs())->map->getTabId()->all() === ['t1', 't2'])->ordered();
+        $api->shouldNotReceive('updateTabs');
 
         $this->artisan('docusign:label-template-fields', ['template_id' => 'tpl-w9'])
-            ->expectsOutputToContain('No Investor text field marked "price_per_unit"')
+            ->expectsOutputToContain('"units" moves from the Investor to the Counter Signer')
+            ->expectsOutputToContain('No text field marked "price_per_unit"')
             ->expectsOutputToContain('2 field(s) updated')
+            ->assertSuccessful();
+    }
+
+    public function test_default_text_becomes_the_data_label_in_place(): void
+    {
+        $api = $this->templatesApi([$this->field('t1', 'Text 9f2c', 'investor_full_name')]);
+        $api->shouldReceive('updateTabs')->once()->withArgs(fn ($acct, $recipient, $template, Tabs $tabs) => $recipient === '2'
+            && $tabs->getTextTabs()[0]->getTabId() === 't1'
+            && $tabs->getTextTabs()[0]->getTabLabel() === 'investor_full_name'
+            && $tabs->getTextTabs()[0]->getValue() === '');
+        $api->shouldNotReceive('createTabs');
+
+        $this->artisan('docusign:label-template-fields', ['template_id' => 'tpl-w9', '--role' => 'investor'])
+            ->assertSuccessful();
+    }
+
+    public function test_fields_already_set_up_are_left_alone(): void
+    {
+        $done = fn ($id, $label) => (new Text())->setTabId($id)->setTabLabel($label)->setValue('')->setRequired('false')->setShared('false')->setPageNumber('1');
+        $api = $this->templatesApi([], array_map($done, ['a', 'b', 'c', 'd', 'e'], EnvelopeBuilder::PRICED_LABELS));
+        $api->shouldNotReceive('updateTabs');
+        $api->shouldNotReceive('createTabs');
+
+        $this->artisan('docusign:label-template-fields', ['template_id' => 'tpl-w9'])
+            ->expectsOutputToContain('Nothing to change')
             ->assertSuccessful();
     }
 
     public function test_a_dry_run_changes_nothing(): void
     {
-        $api = $this->templatesApi([$this->field('t1', 'Text 9f2c', 'units')]);
-        $api->shouldNotReceive('updateTabs');
+        $api = $this->templatesApi([$this->field('t1', 'units', '')]);
+        $api->shouldNotReceive('createTabs');
+        $api->shouldNotReceive('deleteTabs');
 
         $this->artisan('docusign:label-template-fields', ['template_id' => 'tpl-w9', '--dry-run' => true])
             ->expectsOutputToContain('Dry run')

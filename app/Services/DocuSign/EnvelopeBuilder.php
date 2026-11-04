@@ -355,6 +355,11 @@ class EnvelopeBuilder
         // production W-9 template was refused with "'email' not set for
         // recipient with recipientId 1" even with the template's own IDs.
         if ($package) {
+            $prefillRole = config('docusign.prefill_role') === 'investor' ? 'investor' : 'counter_signer';
+            $prefill = fn (string $role) => $pricing !== null && $role === $prefillRole
+                ? $this->labelledValueTabs($pricing['display'])
+                : null;
+
             return (new EnvelopeDefinition())
                 ->setTemplateId($templateId)
                 ->setTemplateRoles([
@@ -366,13 +371,14 @@ class EnvelopeBuilder
                         // a signer with a client user ID; the app emails them.
                         ->setClientUserId(self::clientUserIdFor('investor', (string) $investor->code))
                         ->setRoutingOrder($investorOrder)
-                        ->setTabs($pricing !== null ? $this->labelledValueTabs($pricing['display']) : null),
+                        ->setTabs($prefill('investor')),
                     (new TemplateRole())
                         ->setRoleName($counterSignerRoleName)
                         ->setName($counterSignerName)
                         ->setEmail($counterSignerEmail)
                         ->setClientUserId(self::clientUserIdFor('counter_signer', (string) $investor->code))
-                        ->setRoutingOrder($counterSignerOrder),
+                        ->setRoutingOrder($counterSignerOrder)
+                        ->setTabs($prefill('counter_signer')),
                 ])
                 ->setEmailSubject('Access Real Estate Fund I — your subscription documents')
                 ->setEmailBlurb("Hi {$investor->name},\n\nYour subscription documents for Access Real Estate Fund I are ready to sign. Please review and sign at your earliest convenience.\n\nIf you have any questions, reply to this email.\n\nThank you,\nAccess Properties")

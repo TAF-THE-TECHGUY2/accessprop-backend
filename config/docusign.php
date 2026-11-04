@@ -42,6 +42,12 @@ return [
     // is filled and Units are priced when the money clears, as before.
     'prefill_fields' => (bool) env('DOCUSIGN_PREFILL_FIELDS', false),
 
+    // Whose fields those are on the template: counter_signer or investor.
+    // DocuSign hides a later signer's fields from an earlier one, so they
+    // belong to whoever signs first for both signers to see the terms. Move
+    // them on the template to match with docusign:label-template-fields --role.
+    'prefill_role' => env('DOCUSIGN_PREFILL_ROLE', 'counter_signer'),
+
     // The app's own signing emails: a reminder to whoever's turn it is every
     // `every_days`, at most `max` times.
     'reminders' => [

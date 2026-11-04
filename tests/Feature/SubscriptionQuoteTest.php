@@ -117,7 +117,9 @@ class SubscriptionQuoteTest extends TestCase
         $this->assertSame('1', $counterRole->getRoutingOrder());
 
         // Fields filled by Data Label only; nothing positioned, no signatures.
-        $tabs = $investorRole->getTabs();
+        // On the counter signer's side: they sign first, and DocuSign shows an
+        // earlier signer's completed fields to a later one, never the reverse.
+        $tabs = $counterRole->getTabs();
         $this->assertSame(
             ['investor_full_name', 'total_purchase_price', 'subscription_premium_pct', 'price_per_unit', 'units'],
             array_map(fn ($t) => $t->getTabLabel(), $tabs->getTextTabs()),
@@ -127,6 +129,23 @@ class SubscriptionQuoteTest extends TestCase
             $this->assertNull($tab->getPageNumber());
         }
         $this->assertNull($tabs->getSignHereTabs());
+        $this->assertNull($investorRole->getTabs());
+    }
+
+    public function test_the_terms_can_be_filled_on_the_investor_s_side_instead(): void
+    {
+        config(['docusign.prefill_role' => 'investor']);
+
+        $definition = app(EnvelopeBuilder::class)->buildEnvelopeDefinition(
+            templateId: 'tpl-w9',
+            investor: $investor = $this->investor(),
+            counterSignerEmail: 'dion@example.com',
+            counterSignerName: 'Dion',
+            pricing: app(EnvelopeBuilder::class)->quote($investor),
+        );
+
+        [$investorRole, $counterRole] = $definition->getTemplateRoles();
+        $this->assertCount(5, $investorRole->getTabs()->getTextTabs());
         $this->assertNull($counterRole->getTabs());
     }
 
