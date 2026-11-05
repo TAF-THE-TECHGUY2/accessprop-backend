@@ -11,6 +11,7 @@ use App\Models\FundHolding;
 use App\Models\FundTransaction;
 use App\Models\FundUnitPrice;
 use App\Models\PortalDocument;
+use App\Models\User;
 use App\Services\FeeAllocator;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -54,6 +55,7 @@ class AdminFundController extends Controller
             'aumAtCost' => round($aum, 2),
             'aumAtNav' => round($aumAtNav, 2),
             'holdingsCount' => $holdings->count(),
+            'premiumChanges' => $this->premiumHistory($fund),
             'unitPrices' => $fund->unitPrices->map(fn ($p) => [
                 'id' => $p->id,
                 'date' => $p->as_of_date->toDateString(),
@@ -179,6 +181,51 @@ class AdminFundController extends Controller
         }
 
         return response()->json($this->summary($fund->fresh()));
+    }
+
+    // ----- Issuance premium -----
+
+    /**
+     * Set the premium new subscriptions pay over the Base NAV. Goes through
+     * Fund::changePremium() so every change is logged with who, when and why;
+     * agreements already sent keep the premium they were priced at.
+     */
+    public function updatePremium(Request $request, string $code): JsonResponse
+    {
+        $fund = Fund::where('code', $code)->firstOrFail();
+
+        $data = $request->validate([
+            // Signed: a discount to book value is allowed (see the migration).
+            'premiumPct' => ['required', 'numeric', 'min:-50', 'max:100', 'decimal:0,3'],
+            'reason' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $new = round((float) $data['premiumPct'], 3);
+        if (abs($new - (float) $fund->current_premium_pct) < 0.0005) {
+            return response()->json(['message' => 'The premium is already '.number_format($new, 3).'%.'], 422);
+        }
+
+        $fund->changePremium($new, $request->user()?->id, $data['reason'] ?? null);
+
+        return response()->json([
+            'premiumPct' => (float) $fund->fresh()->current_premium_pct,
+            'premiumChanges' => $this->premiumHistory($fund),
+        ]);
+    }
+
+    private function premiumHistory(Fund $fund): array
+    {
+        $changes = $fund->premiumChanges()->limit(20)->get();
+        $names = User::whereIn('id', $changes->pluck('changed_by')->filter())->pluck('name', 'id');
+
+        return $changes->map(fn ($c) => [
+            'id' => $c->id,
+            'oldPct' => $c->old_premium_pct !== null ? (float) $c->old_premium_pct : null,
+            'newPct' => (float) $c->new_premium_pct,
+            'reason' => $c->reason,
+            'changedBy' => $c->changed_by ? ($names[$c->changed_by] ?? 'Deleted user') : null,
+            'changedAt' => $c->changed_at->toIso8601String(),
+        ])->values()->all();
     }
 
     // ----- Unit prices -----
@@ -475,6 +522,7 @@ class AdminFundController extends Controller
             'holdingsCount' => $fund->holdings_count ?? $fund->holdings()->count(),
             'currentUnitPrice' => $latest ? (float) $latest->price : null,
             'currentUnitPriceDate' => $latest ? $latest->as_of_date->toDateString() : null,
+            'premiumPct' => (float) $fund->current_premium_pct,
         ];
     }
 

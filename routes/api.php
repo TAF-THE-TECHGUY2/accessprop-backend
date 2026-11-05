@@ -179,6 +179,7 @@ Route::prefix('admin')->group(function () {
         Route::patch('/funds/{code}', [AdminFundController::class, 'update']);
         Route::delete('/funds/{code}', [AdminFundController::class, 'destroy']);
         Route::post('/funds/{code}/unit-prices', [AdminFundController::class, 'storeUnitPrice']);
+        Route::post('/funds/{code}/premium', [AdminFundController::class, 'updatePremium']);
         Route::delete('/unit-prices/{id}', [AdminFundController::class, 'destroyUnitPrice']);
         Route::post('/funds/{code}/distributions', [AdminFundController::class, 'declareDistribution']);
         Route::delete('/distributions/{id}', [AdminFundController::class, 'destroyDistribution']);
