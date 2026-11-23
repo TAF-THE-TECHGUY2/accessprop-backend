@@ -96,6 +96,11 @@ class StripeClient
         return PaymentIntent::retrieve($intentId);
     }
 
+    public function cancelPaymentIntent(string $intentId): PaymentIntent
+    {
+        return PaymentIntent::retrieve($intentId)->cancel();
+    }
+
     /**
      * Verify a webhook payload and return the constructed Event.
      * Throws UnexpectedValueException on bad signature or missing secret.

@@ -84,6 +84,9 @@ class InvestorFundingController extends Controller
         // a webhook didn't fire — e.g. local dev without the Stripe CLI listener).
         $instruction = $this->processing->syncFundingInstructionFromStripe($instruction);
 
+        // Ask for what is owed now, e.g. after a whole-Unit agreement lowered it.
+        $instruction = $this->processing->refreshStaleFundingInstruction($investor->fresh(), $instruction) ?? $instruction;
+
         return response()->json([
             'publishableKey' => $this->stripe->publishableKey(),
             'clientSecret' => $instruction->provider_client_secret,

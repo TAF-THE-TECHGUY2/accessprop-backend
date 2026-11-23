@@ -878,6 +878,49 @@ class InvestorProcessingService
      * Look up the active Stripe FundingInstruction for an investor (the latest released one).
      * Returns null if none exists.
      */
+    /**
+     * An unpaid payment request for an amount the investor no longer owes —
+     * created before a whole-Unit agreement moved the commitment from $10,000
+     * to $9,991.67 — is cancelled at Stripe and replaced with one for the
+     * current commitment. Anything already paid, or in flight, is left alone.
+     */
+    public function refreshStaleFundingInstruction(Investor $investor, FundingInstruction $instruction): FundingInstruction
+    {
+        $owed = (int) round((float) $investor->investment_commitment * 100);
+
+        if ($instruction->provider !== 'stripe' || $instruction->status !== 'released'
+            || $owed <= 0 || (int) $instruction->amount_cents === $owed || ! $instruction->provider_intent_id) {
+            return $instruction;
+        }
+
+        try {
+            $this->stripeClient()->cancelPaymentIntent($instruction->provider_intent_id);
+        } catch (\Throwable $e) {
+            // Could not cancel (e.g. the investor has just started paying it):
+            // keep it rather than leave two live requests.
+            Log::warning('Stale PaymentIntent not cancelled', ['intent' => $instruction->provider_intent_id, 'error' => $e->getMessage()]);
+
+            return $instruction;
+        }
+
+        $instruction->update(['status' => 'superseded']);
+        $this->releaseFundingInstructions($investor);
+
+        $this->logActivity(
+            $investor,
+            'funding_request_replaced',
+            'Payment request updated',
+            sprintf(
+                'Payment request changed from $%s to $%s to match the commitment.',
+                number_format($instruction->amount_cents / 100, 2),
+                number_format($owed / 100, 2),
+            ),
+            ['supersededIntent' => $instruction->provider_intent_id]
+        );
+
+        return $this->activeFundingInstruction($investor->fresh());
+    }
+
     public function activeFundingInstruction(Investor $investor): ?FundingInstruction
     {
         return FundingInstruction::query()
@@ -989,6 +1032,12 @@ class InvestorProcessingService
                     'event' => $eventType,
                 ]);
 
+                return $investor;
+            }
+
+            // Replaced by a request for the right amount; its cancellation is
+            // ours, not a failed payment.
+            if ($instruction->status === 'superseded' && $eventType !== 'payment_intent.succeeded') {
                 return $investor;
             }
 

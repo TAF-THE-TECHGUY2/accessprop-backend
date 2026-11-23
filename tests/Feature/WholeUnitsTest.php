@@ -11,9 +11,12 @@ use App\Models\InvestorActivityLog;
 use App\Models\SigningEnvelope;
 use App\Services\DocuSign\EnvelopeBuilder;
 use App\Services\DocuSign\EnvelopeStatusHandler;
+use App\Services\Integrations\StripeClient;
 use App\Services\InvestorProcessingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Bus;
+use Mockery;
+use Stripe\PaymentIntent;
 use Tests\TestCase;
 
 /**
@@ -201,5 +204,77 @@ class WholeUnitsTest extends TestCase
         $tx = FundTransaction::where('investor_id', $this->investor->id)->sole();
         $this->assertNotSame(695.0, (float) $tx->units);
         $this->assertSame(1, InvestorActivityLog::where('action', 'payment_differs_from_signed_terms')->count());
+    }
+
+    private function stripeExpectingReplacement(bool $cancelFails = false): StripeClient
+    {
+        $stripe = Mockery::mock(StripeClient::class);
+        $stripe->shouldReceive('isConfigured')->andReturn(true);
+        $stripe->shouldReceive('dashboardUrlForIntent')->andReturn('https://dashboard.stripe.test');
+
+        $cancel = $stripe->shouldReceive('cancelPaymentIntent')->with('pi_old');
+        $cancelFails ? $cancel->andThrow(new \RuntimeException('processing')) : $cancel->andReturn(PaymentIntent::constructFrom(['id' => 'pi_old']));
+
+        $stripe->shouldReceive('createAchPaymentIntent')
+            ->times($cancelFails ? 0 : 1)
+            ->withArgs(fn ($inv, $cents) => $cents === 999_167)
+            ->andReturn(PaymentIntent::constructFrom(['id' => 'pi_new', 'client_secret' => 'secret_new', 'status' => 'requires_payment_method', 'created' => time()]));
+
+        return $stripe;
+    }
+
+    private function oldRequest(string $status = 'released'): FundingInstruction
+    {
+        return FundingInstruction::create([
+            'investor_profile_id' => $this->investor->id,
+            'status' => $status,
+            'provider' => 'stripe',
+            'provider_intent_id' => 'pi_old',
+            'amount_cents' => 1_000_000,
+            'currency' => 'usd',
+        ]);
+    }
+
+    public function test_a_10k_payment_request_made_before_signing_is_replaced_with_the_signed_amount(): void
+    {
+        $old = $this->oldRequest();
+        $this->signedEnvelope();
+
+        $service = new InvestorProcessingService(stripe: $this->stripeExpectingReplacement());
+        $new = $service->refreshStaleFundingInstruction($this->investor->fresh(), $old);
+
+        $this->assertSame('pi_new', $new->provider_intent_id);
+        $this->assertSame(999_167, (int) $new->amount_cents);
+        $this->assertSame('superseded', $old->fresh()->status);
+        $this->assertSame(1, InvestorActivityLog::where('action', 'funding_request_replaced')->count());
+
+        // Stripe's cancellation of the old request is not a failed payment.
+        $service->applyStripePaymentIntentEvent('pi_old', 'payment_intent.canceled', ['status' => 'canceled']);
+        $this->assertSame('superseded', $old->fresh()->status);
+        $this->assertSame(0, InvestorActivityLog::where('action', 'stripe_payment_failed')->count());
+    }
+
+    public function test_a_request_already_being_paid_is_left_alone(): void
+    {
+        $old = $this->oldRequest('processing');
+        $this->signedEnvelope();
+
+        $stripe = Mockery::mock(StripeClient::class);
+        $stripe->shouldNotReceive('cancelPaymentIntent');
+        $result = (new InvestorProcessingService(stripe: $stripe))->refreshStaleFundingInstruction($this->investor->fresh(), $old);
+
+        $this->assertSame($old->id, $result->id);
+    }
+
+    public function test_a_request_stripe_will_not_cancel_is_kept(): void
+    {
+        $old = $this->oldRequest();
+        $this->signedEnvelope();
+
+        $result = (new InvestorProcessingService(stripe: $this->stripeExpectingReplacement(cancelFails: true)))
+            ->refreshStaleFundingInstruction($this->investor->fresh(), $old);
+
+        $this->assertSame($old->id, $result->id);
+        $this->assertSame('released', $old->fresh()->status);
     }
 }
