@@ -42,6 +42,13 @@ return [
     // is filled and Units are priced when the money clears, as before.
     'prefill_fields' => (bool) env('DOCUSIGN_PREFILL_FIELDS', false),
 
+    // Sell whole Units only. The Units on an agreement are rounded down to a
+    // whole number and the contribution becomes Units × the price per Unit
+    // (4dp, as printed), so $10,000 at $14.3765 is 695 Units for $9,991.67.
+    // The commitment follows once signed; a payment over it by less than one
+    // Unit still gets the signed Units, and the excess is flagged for refund.
+    'whole_units' => (bool) env('PRICING_WHOLE_UNITS', false),
+
     // Whose fields those are on the template: counter_signer or investor.
     // DocuSign hides a later signer's fields from an earlier one, so they
     // belong to whoever signs first for both signers to see the terms. Move

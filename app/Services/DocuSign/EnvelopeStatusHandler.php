@@ -3,6 +3,7 @@
 namespace App\Services\DocuSign;
 
 use App\Jobs\DownloadCompletedDocumentJob;
+use App\Models\InvestorActivityLog;
 use App\Models\SigningEnvelope;
 
 class EnvelopeStatusHandler
@@ -44,6 +45,7 @@ class EnvelopeStatusHandler
                 break;
 
             case 'completed':
+                $justCompleted = $envelope->status !== SigningEnvelope::STATUS_COMPLETED;
                 $envelope->completed_at = now();
                 if (! $envelope->signed_at) {
                     $envelope->signed_at = now();
@@ -69,6 +71,10 @@ class EnvelopeStatusHandler
         $envelope->save();
 
         $this->syncInvestorSigningStatus($envelope);
+
+        if ($justCompleted ?? false) {
+            $this->adoptWholeUnitAmount($envelope);
+        }
 
         if ($envelope->status === SigningEnvelope::STATUS_COMPLETED && ! $envelope->signed_document_path) {
             DownloadCompletedDocumentJob::dispatch($envelope->id);
@@ -125,6 +131,47 @@ class EnvelopeStatusHandler
         return $payload['data']['envelopeSummary']['voidedReason']
             ?? $payload['envelopeSummary']['voidedReason']
             ?? null;
+    }
+
+    /**
+     * A whole-Unit agreement signs for a little less than the investor offered
+     * ($9,991.67 for 695 Units, not $10,000). Once signed, that is what they
+     * owe, so the commitment the payment step charges follows it.
+     */
+    private function adoptWholeUnitAmount(SigningEnvelope $envelope): void
+    {
+        $pricing = $envelope->pricing;
+        $investor = $envelope->investor;
+
+        if (! $investor || empty($pricing['whole_units']) || ! isset($pricing['amount'], $pricing['requested_amount'])) {
+            return;
+        }
+
+        $signed = (float) $pricing['amount'];
+        $commitment = (float) $investor->investment_commitment;
+
+        // Only the commitment this agreement priced; a later edit by an admin wins.
+        if (abs($commitment - (float) $pricing['requested_amount']) >= 0.01 || abs($commitment - $signed) < 0.01) {
+            return;
+        }
+
+        $investor->forceFill(['investment_commitment' => $signed])->save();
+
+        InvestorActivityLog::create([
+            'investor_profile_id' => $investor->id,
+            'category' => 'processing',
+            'action' => 'commitment_adjusted_to_whole_units',
+            'title' => 'Commitment adjusted to whole Units',
+            'description' => sprintf(
+                'Commitment changed from $%s to $%s: %s whole Units at $%s per Unit, as signed.',
+                number_format($commitment, 2),
+                number_format($signed, 2),
+                number_format((float) $pricing['units'], 0),
+                number_format((float) $pricing['price_per_unit'], 4),
+            ),
+            'metadata' => ['signingEnvelopeId' => $envelope->id],
+            'occurred_at' => now(),
+        ]);
     }
 
     private function syncInvestorSigningStatus(SigningEnvelope $envelope): void

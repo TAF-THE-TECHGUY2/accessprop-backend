@@ -1894,6 +1894,26 @@ class InvestorProcessingService
             $recordedPremium = (float) $signedQuote['premium_pct'];
             $pricePerUnit = round((float) $signedQuote['price_per_unit'], 8);
             $units = round((float) $signedQuote['units'], 6);
+
+            // Only the signed contribution is invested; the rest is owed back.
+            $refund = round($amount - (float) $signedQuote['amount'], 2);
+            if ($refund >= 0.01) {
+                $amount = round((float) $signedQuote['amount'], 2);
+                $this->logActivity(
+                    $investor,
+                    'whole_unit_refund_due',
+                    'Refund due: $'.number_format($refund, 2),
+                    sprintf(
+                        'Received $%s against $%s signed for %s whole Units. Invested $%s; refund $%s to the investor.',
+                        number_format($amount + $refund, 2),
+                        number_format($amount, 2),
+                        number_format($units, 0),
+                        number_format($amount, 2),
+                        number_format($refund, 2),
+                    ),
+                    ['signingEnvelopeId' => $quoteEnvelope->id, 'refund' => $refund]
+                );
+            }
         }
 
         $transaction = FundTransaction::create([
@@ -1969,7 +1989,15 @@ class InvestorProcessingService
             return [null, null];
         }
 
-        if (abs((float) $quote['amount'] - $amount) >= 0.01) {
+        // Whole Units: paying the amount offered rather than the slightly lower
+        // amount signed (e.g. an older $10,000 payment link) still buys the
+        // signed Units, as long as the excess is short of one more Unit.
+        $excess = $amount - (float) $quote['amount'];
+        $wholeUnitOverpayment = ! empty($quote['whole_units'])
+            && $excess > -0.005
+            && $excess < (float) $quote['price_per_unit'];
+
+        if (! $wholeUnitOverpayment && abs((float) $quote['amount'] - $amount) >= 0.01) {
             $this->logActivity(
                 $investor,
                 'payment_differs_from_signed_terms',

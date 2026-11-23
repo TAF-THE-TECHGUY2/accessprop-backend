@@ -286,10 +286,31 @@ class EnvelopeBuilder
         $premiumPct = (float) $fund->current_premium_pct;
         $pricePerUnit = $baseNav * (1 + $premiumPct / 100);
         $units = $amount / $pricePerUnit;
+        $requested = $amount;
+        $wholeUnits = (bool) config('docusign.whole_units');
+
+        // Whole Units: priced at the 4dp price the agreement prints, Units
+        // rounded down so the investor never pays more than they offered, and
+        // the contribution recomputed so price × Units on the page is exact.
+        if ($wholeUnits) {
+            $pricePerUnit = round($pricePerUnit, 4);
+            $units = floor($amount / $pricePerUnit + 1e-9);
+
+            if ($units < 1) {
+                throw new RuntimeException(sprintf(
+                    'Investor %s: $%s does not buy one whole Unit at $%s.',
+                    $investor->code, number_format($amount, 2), number_format($pricePerUnit, 4),
+                ));
+            }
+
+            $amount = round($units * $pricePerUnit, 2);
+        }
 
         return [
             'fund_id' => $fund->id,
             'amount' => round($amount, 2),
+            'requested_amount' => round($requested, 2),
+            'whole_units' => $wholeUnits,
             'base_nav' => (string) $nav->price,
             'base_nav_as_of' => $nav->as_of_date->toDateString(),
             'premium_pct' => $premiumPct,
@@ -301,7 +322,7 @@ class EnvelopeBuilder
                 'total_purchase_price' => number_format($amount, 2),
                 'subscription_premium_pct' => number_format($premiumPct, 2),
                 'price_per_unit' => number_format($pricePerUnit, 4),
-                'units' => number_format($units, 4),
+                'units' => number_format($units, $wholeUnits ? 0 : 4),
             ],
         ];
     }
