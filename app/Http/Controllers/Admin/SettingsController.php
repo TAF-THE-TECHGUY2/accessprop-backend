@@ -21,6 +21,7 @@ class SettingsController extends Controller
         'defaultCountry' => 'default_country',
         'allowParallelOnboarding' => 'allow_parallel_onboarding',
         'demoPaymentsEnabled' => 'demo_payments_enabled',
+        'wholeUnitsOnly' => 'whole_units_only',
         'termsOfUseUrl' => 'terms_of_use_url',
         'privacyPolicyUrl' => 'privacy_policy_url',
         'loginBackUrl' => 'login_back_url',
@@ -47,6 +48,7 @@ class SettingsController extends Controller
             'defaultCountry' => ['sometimes', 'string', 'max:255'],
             'allowParallelOnboarding' => ['sometimes', 'boolean'],
             'demoPaymentsEnabled' => ['sometimes', 'boolean'],
+            'wholeUnitsOnly' => ['sometimes', 'boolean'],
             // Public-facing links: a typo here is visible to every investor
             // on the create-account page, so reject anything that isn't a URL.
             'termsOfUseUrl' => ['sometimes', 'url', 'max:2048'],
@@ -87,6 +89,8 @@ class SettingsController extends Controller
             'defaultCountry' => $setting->default_country,
             'allowParallelOnboarding' => $setting->allow_parallel_onboarding,
             'demoPaymentsEnabled' => $setting->demo_payments_enabled,
+            // What is in force, from the switch or, until it is saved, .env.
+            'wholeUnitsOnly' => $setting->whole_units_only ?? (bool) config('docusign.whole_units'),
             'termsOfUseUrl' => $setting->terms_of_use_url,
             'privacyPolicyUrl' => $setting->privacy_policy_url,
             'loginBackUrl' => $setting->login_back_url,

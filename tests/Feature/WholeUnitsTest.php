@@ -8,7 +8,10 @@ use App\Models\FundTransaction;
 use App\Models\FundUnitPrice;
 use App\Models\Investor;
 use App\Models\InvestorActivityLog;
+use App\Models\Setting;
 use App\Models\SigningEnvelope;
+use App\Models\User;
+use Laravel\Sanctum\Sanctum;
 use App\Services\DocuSign\EnvelopeBuilder;
 use App\Services\DocuSign\EnvelopeStatusHandler;
 use App\Services\Integrations\StripeClient;
@@ -276,5 +279,24 @@ class WholeUnitsTest extends TestCase
 
         $this->assertSame($old->id, $result->id);
         $this->assertSame('released', $old->fresh()->status);
+    }
+
+    public function test_the_admin_settings_switch_overrides_the_env_setting(): void
+    {
+        config(['docusign.whole_units' => false]);
+        Sanctum::actingAs(User::factory()->create());
+
+        // Until saved, Settings shows what .env says.
+        $this->getJson('/api/admin/settings')->assertOk()->assertJsonPath('wholeUnitsOnly', false);
+
+        $this->putJson('/api/admin/settings', ['wholeUnitsOnly' => true])
+            ->assertOk()->assertJsonPath('wholeUnitsOnly', true);
+        $this->assertSame('695', app(EnvelopeBuilder::class)->quote($this->investor)['display']['units']);
+
+        // And off again, even with .env saying on.
+        config(['docusign.whole_units' => true]);
+        $this->putJson('/api/admin/settings', ['wholeUnitsOnly' => false])->assertOk();
+        $this->assertFalse(Setting::wholeUnitsOnly());
+        $this->assertSame('695.5809', app(EnvelopeBuilder::class)->quote($this->investor)['display']['units']);
     }
 }

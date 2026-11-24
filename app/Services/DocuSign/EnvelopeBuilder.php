@@ -287,7 +287,7 @@ class EnvelopeBuilder
         $pricePerUnit = $baseNav * (1 + $premiumPct / 100);
         $units = $amount / $pricePerUnit;
         $requested = $amount;
-        $wholeUnits = (bool) config('docusign.whole_units');
+        $wholeUnits = \App\Models\Setting::wholeUnitsOnly();
 
         // Whole Units: priced at the 4dp price the agreement prints, Units
         // rounded down so the investor never pays more than they offered, and

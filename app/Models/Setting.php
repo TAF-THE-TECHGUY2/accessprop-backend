@@ -37,7 +37,19 @@ class Setting extends Model
         'auto_activate_dashboard' => 'boolean',
         'allow_parallel_onboarding' => 'boolean',
         'demo_payments_enabled' => 'boolean',
+        'whole_units_only' => 'boolean',
     ];
+
+    /**
+     * Sell whole Units only: the admin Settings switch once it has been saved
+     * there, otherwise PRICING_WHOLE_UNITS.
+     */
+    public static function wholeUnitsOnly(): bool
+    {
+        $stored = static::current()?->whole_units_only;
+
+        return $stored ?? (bool) config('docusign.whole_units');
+    }
 
     /**
      * Read-only lookup for hot paths like addressing an outgoing email, where
